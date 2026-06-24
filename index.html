@@ -85,7 +85,7 @@
         <h2 class="text-[24px] font-extrabold text-ink tracking-tight">タイムライン</h2>
         <div class="flex items-center gap-2 text-sub">
           <div class="flex -space-x-2" id="feedAvatars"></div>
-          <span class="text-[12px] font-bold">きょう 3件</span>
+          <span id="feedCount" class="text-[12px] font-bold">きょう 0件</span>
         </div>
       </div>
       <div id="feedList" class="space-y-3"></div>
@@ -188,39 +188,39 @@
             <div class="relative shrink-0" style="width:38px;height:38px">
               <svg width="38" height="38" viewBox="0 0 38 38">
                 <circle cx="19" cy="19" r="15" fill="none" stroke="#ECEBE7" stroke-width="4"/>
-                <circle cx="19" cy="19" r="15" fill="none" stroke="#14B87C" stroke-width="4" stroke-linecap="round" stroke-dasharray="94.2" stroke-dashoffset="28.3" transform="rotate(-90 19 19)"/>
+                <circle id="heroRing" cx="19" cy="19" r="15" fill="none" stroke="#14B87C" stroke-width="4" stroke-linecap="round" stroke-dasharray="94.2" stroke-dashoffset="94.2" transform="rotate(-90 19 19)"/>
               </svg>
-              <div class="absolute inset-0 flex items-center justify-center"><span class="text-[10px] font-extrabold text-ink leading-none">70<span class="text-[7px] text-faint">%</span></span></div>
+              <div class="absolute inset-0 flex items-center justify-center"><span class="text-[10px] font-extrabold text-ink leading-none"><span id="heroPct">0</span><span class="text-[7px] text-faint">%</span></span></div>
             </div>
             <div class="leading-tight">
               <p class="text-[9px] text-faint font-bold">予定達成</p>
-              <p class="text-[12px] font-extrabold text-ink">7/10回</p>
+              <p id="heroCount" class="text-[12px] font-extrabold text-ink">0/0回</p>
             </div>
           </div>
         </div>
         <div class="grid grid-cols-3 divide-x divide-line">
           <div class="text-center px-1">
             <p class="text-[11px] text-faint font-bold mb-1.5">運動日数</p>
-            <p class="text-[26px] font-extrabold text-ink leading-none"><span id="statDays">4</span><span class="text-[12px] text-faint font-bold ml-0.5">日</span></p>
+            <p class="text-[26px] font-extrabold text-ink leading-none"><span id="statDays">0</span><span class="text-[12px] text-faint font-bold ml-0.5">日</span></p>
           </div>
           <div class="text-center px-1">
             <p class="text-[11px] text-faint font-bold mb-1.5">連続記録</p>
-            <p class="text-[26px] font-extrabold text-accent leading-none">6<span class="text-[12px] text-faint font-bold ml-0.5">日</span></p>
+            <p class="text-[26px] font-extrabold text-accent leading-none"><span id="heroStreak">0</span><span class="text-[12px] text-faint font-bold ml-0.5">日</span></p>
           </div>
           <div class="text-center px-1">
             <p class="text-[11px] text-faint font-bold mb-1.5">体重</p>
-            <p class="text-[26px] font-extrabold text-ink leading-none">71.0</p>
-            <p class="text-[10px] text-accent font-bold mt-1">▼0.8kg</p>
+            <p class="text-[26px] font-extrabold text-ink leading-none" id="heroWeight">—</p>
+            <p class="text-[10px] text-accent font-bold mt-1" id="heroWeightDelta"></p>
           </div>
         </div>
         <div class="grid grid-cols-2 divide-x divide-line mt-4 pt-4 border-t border-line">
           <div class="text-center px-1">
             <p class="text-[10px] text-faint font-bold mb-1">総運動時間</p>
-            <p class="text-[15px] font-extrabold text-ink leading-none">5<span class="text-[10px] text-faint font-bold">時間</span>20<span class="text-[10px] text-faint font-bold">分</span></p>
+            <p class="text-[15px] font-extrabold text-ink leading-none" id="heroTime">—</p>
           </div>
           <div class="text-center px-1">
             <p class="text-[10px] text-faint font-bold mb-1">メンテ差分</p>
-            <p class="text-[15px] font-extrabold text-accent leading-none">-1.4<span class="text-[10px] text-faint font-bold">k</span></p>
+            <p class="text-[15px] font-extrabold text-accent leading-none" id="heroMaint">—</p>
           </div>
         </div>
       </div>
@@ -231,13 +231,20 @@
           <p class="text-[13px] font-extrabold text-ink">体重とカロリー収支</p>
           <p id="weightDelta" class="text-[12px] font-bold text-accent">-0.8kg</p>
         </div>
-        <div class="relative h-[120px]"><canvas id="weightChart"></canvas></div>
-        <div class="flex items-center gap-3 mt-2.5 mb-1 pl-1">
-          <span class="flex items-center gap-1.5 text-[10px] text-faint font-bold"><span class="w-2 h-2 rounded-sm" style="background:#14B87C"></span>不足（締まった）</span>
-          <span class="flex items-center gap-1.5 text-[10px] text-faint font-bold"><span class="w-2 h-2 rounded-sm" style="background:#C9CEC6"></span>超過</span>
+        <div id="weightBody">
+          <div class="relative h-[120px]"><canvas id="weightChart"></canvas></div>
+          <div class="flex items-center gap-3 mt-2.5 mb-1 pl-1">
+            <span class="flex items-center gap-1.5 text-[10px] text-faint font-bold"><span class="w-2 h-2 rounded-sm" style="background:#14B87C"></span>不足（締まった）</span>
+            <span class="flex items-center gap-1.5 text-[10px] text-faint font-bold"><span class="w-2 h-2 rounded-sm" style="background:#C9CEC6"></span>超過</span>
+          </div>
+          <div class="relative h-[74px]"><canvas id="balanceChart"></canvas></div>
+          <p id="maintCaption" class="text-[10px] text-faint mt-2 pl-1"></p>
         </div>
-        <div class="relative h-[74px]"><canvas id="balanceChart"></canvas></div>
-        <p id="maintCaption" class="text-[10px] text-faint mt-2 pl-1"></p>
+        <div id="weightEmpty" class="hidden text-center py-8">
+          <p class="text-[26px]">🌱</p>
+          <p class="text-[12px] text-faint font-bold mt-1">まだ記録がありません</p>
+          <p class="text-[11px] text-faint mt-1">予定から体重や食事を入力すると、ここに育っていきます</p>
+        </div>
       </div>
 
       <!-- exercise days -->
@@ -246,7 +253,11 @@
           <p class="text-[13px] font-extrabold text-ink">運動日数</p>
           <p class="text-[11px] text-faint">週ごと・直近8週</p>
         </div>
-        <div class="relative h-[120px]"><canvas id="daysChart"></canvas></div>
+        <div id="daysBody" class="relative h-[120px]"><canvas id="daysChart"></canvas></div>
+        <div id="daysEmpty" class="hidden text-center py-8">
+          <p class="text-[12px] text-faint font-bold">まだ運動の記録がありません</p>
+          <p class="text-[11px] text-faint mt-1">予定で「運動開始」すると、ここに積み上がります</p>
+        </div>
       </div>
 
       <!-- group, minimal -->
@@ -403,11 +414,9 @@
 
 <script>
 /* ---------- members ---------- */
+// Flat initial state: just me. Friends arrive in the backend/sharing phase (I/I2).
 const members = {
   boy:   { name:'ぼーい', ini:'ボ', c:'#14B87C' },
-  yuki:  { name:'ゆき',   ini:'ユ', c:'#4E86C4' },
-  taichi:{ name:'たいち', ini:'タ', c:'#E8714C' },
-  mio:   { name:'みお',   ini:'ミ', c:'#8B7BD0' },
 };
 const tagDot = {
   '胸トレ':'#FF6A3D','背中':'#3E86C9','脚':'#7C6CD0',
@@ -430,15 +439,8 @@ function hudCell(label,val,color){
 }
 
 /* ---------- FEED ---------- */
-const posts = [
-  { kind:'resist', who:'mio', time:'20:10', ruleLabel:'飲みは週2まで', text:'金曜の誘い、今週もう2回行ったから今日はスルーできた。えらい自分', r:{fire:6,muscle:1,clap:7} },
-  { who:'yuki', time:'7:20', tags:['有酸素'], cal:'-280', calNeg:true, dur:'42分', burn:'280', intake:'1,650', ph:'linear-gradient(135deg,#EEF3F0,#E6EFEA)', phIco:'🏃',
-    text:'朝ラン5km完了。今日は脚が軽い', r:{fire:5,muscle:2,clap:3} },
-  { who:'taichi', time:'12:40', tags:['胸トレ','肩・腕'], cal:'+150', calNeg:false, dur:'65分', burn:'320', intake:'2,300', ph:'linear-gradient(135deg,#F1EFEC,#ECE9E4)', phIco:'🏋️',
-    text:'昼ジム。ベンチ自己ベスト更新。昼は鶏むね', r:{fire:8,muscle:6,clap:2} },
-  { who:'boy', time:'19:05', tags:['背中'], dur:'58分', ph:'linear-gradient(135deg,#EDEFF2,#E7EBEF)', phIco:'💪',
-    text:'背中の日。懸垂やっと10回いけた', r:{fire:3,muscle:9,clap:4} },
-];
+// Flat initial state: no sample posts. Posts are created via createPost (timer/resist/achieve).
+const posts = [];
 // every post carries who + scope (公開範囲) for future export/share; ids for reference
 let postSeq=0;
 posts.forEach(p=>{ p.id='p'+(postSeq++); if(!p.scope) p.scope='group'; });
@@ -527,18 +529,27 @@ function submitPost(){
   closePostSheet();
   showPage('feed');
 }
-// 記録ヒーローの「運動日数」を logEntries から算出（今週・本人・重複日を除く）
-function renderStats(){
-  const el=document.getElementById('statDays'); if(!el) return;
-  const days=new Set(logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&week.some(w=>w.date===e.date)).map(e=>e.date));
-  el.textContent=days.size;
-}
+// 記録ヒーローを丸ごと再計算（renderProgressHero に統合。下位互換のため名前は残す）
+function renderStats(){ if(typeof renderProgressHero==='function') renderProgressHero(); }
 function renderFeedAvatars(){
+  // unique posters (up to 3), derived from current posts
+  const whos=[...new Set(posts.map(p=>p.who))].filter(k=>members[k]).slice(0,3);
   document.getElementById('feedAvatars').innerHTML =
-    ['taichi','yuki','boy'].map(k=>`<div class="ring-2 ring-bg rounded-full">${avatar(members[k],24)}</div>`).join('');
+    whos.map(k=>`<div class="ring-2 ring-bg rounded-full">${avatar(members[k],24)}</div>`).join('');
+  const cnt=document.getElementById('feedCount'); if(cnt) cnt.textContent=`きょう ${posts.length}件`;
 }
 function renderFeed(){
-  document.getElementById('feedList').innerHTML = posts.map((p,i)=>{
+  renderFeedAvatars();
+  const list=document.getElementById('feedList');
+  if(!posts.length){
+    list.innerHTML=`<div class="text-center py-14 rounded-2xl bg-card border border-dashed border-line">
+      <p class="text-[28px]">🌱</p>
+      <p class="text-[13px] text-faint font-bold mt-2">まだ投稿はありません</p>
+      <p class="text-[11px] text-faint mt-1">運動を記録したり、自分ルールを達成すると、ここに届きます</p>
+    </div>`;
+    return;
+  }
+  list.innerHTML = posts.map((p,i)=>{
     const m=members[p.who];
     if(p.kind==='resist') return `
     <article class="rounded-2xl bg-asoft border border-aline shadow-card overflow-hidden">
@@ -651,24 +662,12 @@ function renderWeek(){
   }).join('');
 }
 // shared weight is 前週比 only — never raw kg. Shown in the selected-day list rows (workoutCard).
-const memberShare = { boy:{wt:'▼0.8kg'}, yuki:{wt:'▼0.3kg'}, taichi:{wt:'▲0.2kg'}, mio:{wt:null} };
+// Flat initial state: no friends yet → empty. (Friends + 相手ごと公開範囲 = backend phase I/I2.)
+const memberShare = {};
 // Structured, export-ready log: each row is {date:'YYYY-MM-DD', type, ...value}.
-// type-tagged (CLAUDE.md「Schedule拡張仕様」). workout + weight live here; nutrition_goal /
-// limit / cheat_day stay as their own mock arrays below.
-const logEntries = [
-  {date:'2026-06-20', type:'workout', who:'taichi', tags:['胸トレ','肩・腕'], time:'12:30', status:'done'},
-  {date:'2026-06-20', type:'workout', who:'yuki',   tags:['有酸素'], time:'7:00',  status:'done'},
-  {date:'2026-06-20', type:'workout', who:'boy',    tags:['背中'],  time:'19:00', status:'changed', note:'21:00→19:00'},
-  {date:'2026-06-20', type:'workout', who:'mio',    tags:['脚'],    time:'21:00', status:'todo'},
-  {date:'2026-06-18', type:'workout', who:'boy', tags:['胸トレ'], time:'19:30', status:'done'},
-  {date:'2026-06-16', type:'workout', who:'boy', tags:['脚'],     time:'20:00', status:'done'},
-  {date:'2026-06-13', type:'workout', who:'boy', tags:['背中'],   time:'18:00', status:'done'},
-  {date:'2026-06-11', type:'workout', who:'boy', tags:['肩・腕'], time:'19:00', status:'done'},
-  {date:'2026-06-20', type:'weight', who:'boy', kg:71.0},
-  {date:'2026-06-18', type:'weight', who:'boy', kg:71.3},
-  {date:'2026-06-16', type:'weight', who:'boy', kg:71.6},
-  {date:'2026-06-20', type:'meal', who:'boy', kcal:1850, protein:120, fat:55, carbs:180},
-];
+// type-tagged (CLAUDE.md「Schedule拡張仕様」). workout / weight / meal live here.
+// Flat initial state: empty. Structure stays so we can wire it to Supabase later.
+const logEntries = [];
 // stable ids so any entry (workout/weight/meal) can be edited or deleted by reference
 let entrySeq=0;
 logEntries.forEach(e=>{ e.id='e'+(entrySeq++); });
@@ -918,10 +917,8 @@ function renderDayWeight(){
 }
 
 // self-rules: each picks 公開(みんなが見れる) or 自分だけ(非公開). No 4-step scope, no warnings. Max 3.
-const limits = [
-  {type:'limit', emoji:'🍺', label:'飲みは週2まで', done:1, total:2, pub:true},
-  {type:'limit', emoji:'🍜', label:'ラーメン我慢', done:0, total:0, pub:false},
-];
+// Flat initial state: no rules yet. User adds up to 3 via 「＋ルール追加」.
+const limits = [];
 function renderLimits(){
   const list=document.getElementById('limitList');
   if(!list) return;
@@ -953,7 +950,7 @@ function recordRuleAchieve(i){
 
 /* ---------- self-rule add + resist record (record-only; timeline post = batch2) ---------- */
 let resistWeek=0;
-let streak=6;   // 🔥有言実行の連続。自分ルール達成/継続で育つ（F項目はここに吸収）
+let streak=0;   // 🔥有言実行の連続。自分ルール達成/継続で育つ（F項目はここに吸収）
 function renderStreak(){ const el=document.getElementById('streakCount'); if(el) el.textContent=streak; }
 function recordResist(){
   resistWeek++;
@@ -980,9 +977,15 @@ function saveRule(){
 }
 
 /* ---------- PROGRESS group ---------- */
-const groupWeek = [{who:'yuki',d:5},{who:'taichi',d:4},{who:'mio',d:3}];
+// Flat initial state: no friends yet (sharing = backend phase I/I2).
+const groupWeek = [];
 function renderGroup(){
-  document.getElementById('groupRow').innerHTML = groupWeek.map(g=>{
+  const row=document.getElementById('groupRow');
+  if(!groupWeek.length){
+    row.innerHTML=`<p class="text-[12px] text-faint text-center py-2">仲間はまだいません。今後、友達を追加できるようになります</p>`;
+    return;
+  }
+  row.innerHTML = groupWeek.map(g=>{
     const m=members[g.who]; const pct=Math.round(g.d/7*100);
     return `<div class="flex items-center gap-3">
       ${avatar(m,26)}
@@ -995,29 +998,30 @@ function renderGroup(){
 
 /* ---------- charts ---------- */
 let charts={}; let chartsReady=false; let chartMode='week';
-// week calorie balance = real intake − maintenance where a meal was logged; else mock fallback (month stays mock)
+const chartLabels={ week:['月','火','水','木','金','土','日'], month:['7週前','6','5','4','3','2','先週','今週'] };
+// All series derive from logEntries (flat初期状態=空). No mock history; month has no history yet → null.
+function weekWeightSeries(){
+  return week.map(w=>{ const e=logEntries.find(x=>x.type==='weight'&&x.who===CURRENT_USER&&x.date===w.date); return e?e.kg:null; });
+}
+function weightSeries(mode){ return mode==='week'?weekWeightSeries():new Array(8).fill(null); }
+// week calorie balance = intake − maintenance where a meal was logged; null where none.
 function weekBalSeries(){
   const maint=maintenanceValue();
-  return week.map((w,i)=>{
-    const meal=logEntries.find(e=>e.type==='meal'&&e.who===CURRENT_USER&&e.date===w.date);
-    return meal ? Math.round(meal.kcal - maint) : weightData.week.bal[i];
-  });
+  return week.map(w=>{ const meal=logEntries.find(e=>e.type==='meal'&&e.who===CURRENT_USER&&e.date===w.date); return meal?Math.round(meal.kcal-maint):null; });
 }
-const weightData = {
-  week:  { labels:['月','火','水','木','金','土','日'], data:[71.8,71.6,71.7,71.3,71.1,70.9,71.0], bal:[-280,-150,120,-300,-420,-80,-280], delta:'-0.8kg' },
-  // month bal = 1日あたり平均の収支（週合計ではなく正規化。週ビューと同尺度でグリッドが効く）
-  month: { labels:['7週前','6','5','4','3','2','先週','今週'], data:[73.2,72.8,72.4,72.0,71.7,71.4,71.1,71.0], bal:[-170,-210,-130,-240,-200,-140,-230,-200], delta:'-2.2kg' },
-};
+function balSeries(mode){ return mode==='week'?weekBalSeries():new Array(8).fill(null); }
+function weekWorkoutDays(){ return new Set(logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&week.some(w=>w.date===e.date)).map(e=>e.date)).size; }
+function daysSeries(){ return [0,0,0,0,0,0,0, weekWorkoutDays()]; }   // only current week known after reset
+function seriesDelta(arr){ const v=arr.filter(x=>x!=null); if(v.length<2) return ''; const diff=+(v[v.length-1]-v[0]).toFixed(1); return (diff<=0?'▼':'▲')+Math.abs(diff)+'kg'; }
 function initCharts(){
   if(chartsReady) return; chartsReady=true;
   Chart.defaults.font.family="'Plus Jakarta Sans','Noto Sans JP'";
   Chart.defaults.color='#A2A69F';
 
-  const w=weightData.week;
   // top panel: weight line (x ticks hidden — shared with balance panel below)
   charts.weight = new Chart(document.getElementById('weightChart'), {
     type:'line',
-    data:{ labels:w.labels, datasets:[{ data:w.data,
+    data:{ labels:chartLabels.week, datasets:[{ data:[], spanGaps:true,
       borderColor:'#14B87C', borderWidth:2.5, tension:.4,
       pointBackgroundColor:'#14B87C', pointRadius:3, pointHoverRadius:5, fill:true,
       backgroundColor:(c)=>{const g=c.chart.ctx.createLinearGradient(0,0,0,120);g.addColorStop(0,'rgba(20,184,124,.12)');g.addColorStop(1,'rgba(20,184,124,0)');return g;} }]},
@@ -1029,7 +1033,7 @@ function initCharts(){
   // bottom panel: calorie balance bars (deficit=teal, surplus=neutral grey — no shame)
   charts.balance = new Chart(document.getElementById('balanceChart'), {
     type:'bar',
-    data:{ labels:w.labels, datasets:[{ data:weekBalSeries(),
+    data:{ labels:chartLabels.week, datasets:[{ data:[],
       backgroundColor:(c)=> (c.raw<=0 ? '#14B87C' : '#C9CEC6'),
       borderRadius:4, barThickness:14 }]},
     options:{ plugins:{legend:{display:false},tooltip:{enabled:false}}, scales:{
@@ -1044,27 +1048,66 @@ function initCharts(){
 
   charts.days = new Chart(document.getElementById('daysChart'), {
     type:'bar',
-    data:{ labels:['7週前','6','5','4','3','2','先週','今週'],
-      datasets:[{ data:[3,4,2,5,4,3,5,4],
+    data:{ labels:chartLabels.month,
+      datasets:[{ data:[],
         backgroundColor:(c)=> c.dataIndex===c.dataset.data.length-1 ? '#14B87C' : '#DDE3DF',
         borderRadius:6, barThickness:15 }]},
     options:{ plugins:{legend:{display:false}}, scales:{
       y:{grid:{color:'#F2F1ED'},border:{display:false},ticks:{stepSize:1,font:{size:10}},suggestedMax:7},
       x:{grid:{display:false},border:{display:false},ticks:{font:{size:11}}} }, maintainAspectRatio:false }
   });
+  updateWeight(chartMode);
 }
+// refresh charts + their no-shame empty states from current data
 function updateWeight(mode){
   if(!charts.weight) return;
-  const d=weightData[mode];
-  charts.weight.data.labels=d.labels;
-  charts.weight.data.datasets[0].data=d.data;
-  charts.weight.update();
-  if(charts.balance){
-    charts.balance.data.labels=d.labels;
-    charts.balance.data.datasets[0].data = mode==='week'?weekBalSeries():d.bal;
-    charts.balance.update();
+  const wser=weightSeries(mode), bser=balSeries(mode);
+  const hasWB = wser.some(x=>x!=null) || bser.some(x=>x!=null);
+  document.getElementById('weightBody').classList.toggle('hidden', !hasWB);
+  document.getElementById('weightEmpty').classList.toggle('hidden', hasWB);
+  if(hasWB){
+    charts.weight.data.labels=chartLabels[mode];   charts.weight.data.datasets[0].data=wser;   charts.weight.update();
+    charts.balance.data.labels=chartLabels[mode];  charts.balance.data.datasets[0].data=bser;  charts.balance.update();
   }
-  document.getElementById('weightDelta').textContent=d.delta;
+  document.getElementById('weightDelta').textContent = seriesDelta(wser)||'—';
+
+  const hasWorkout=logEntries.some(e=>e.type==='workout'&&e.who===CURRENT_USER);
+  document.getElementById('daysBody').classList.toggle('hidden', !hasWorkout);
+  document.getElementById('daysEmpty').classList.toggle('hidden', hasWorkout);
+  if(hasWorkout){ charts.days.data.datasets[0].data=daysSeries(); charts.days.update(); }
+
+  renderProgressHero();
+}
+// 記録ヒーローの数値を logEntries から算出（空ならゼロ/—で自然に）
+function durToMin(s){
+  if(!s) return 0; let m=0;
+  const h=s.match(/(\d+)\s*時間/), mi=s.match(/(\d+)\s*分/);
+  if(h) m+=parseInt(h[1])*60;
+  if(mi) m+=parseInt(mi[1]);
+  if(!h&&!mi){ const n=parseInt(s); if(!isNaN(n)) m+=n; }
+  return m;
+}
+function fmtMinHtml(m){
+  if(!m) return '—';
+  const h=Math.floor(m/60), mm=m%60;
+  return (h?`${h}<span class="text-[10px] text-faint font-bold">時間</span>`:'')+((mm||!h)?`${mm}<span class="text-[10px] text-faint font-bold">分</span>`:'');
+}
+function renderProgressHero(){
+  const wk=logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&week.some(w=>w.date===e.date));
+  const set=(id,v)=>{const el=document.getElementById(id); if(el) el.textContent=v;};
+  set('statDays', new Set(wk.map(e=>e.date)).size);
+  set('heroStreak', streak);
+  const total=wk.length, done=wk.filter(e=>e.status==='done').length;
+  const pct = total ? Math.round(done/total*100) : 0;
+  const ring=document.getElementById('heroRing'); if(ring) ring.setAttribute('stroke-dashoffset', (94.2*(1-pct/100)).toFixed(1));
+  set('heroPct', pct); set('heroCount', `${done}/${total}回`);
+  const weights=logEntries.filter(e=>e.type==='weight'&&e.who===CURRENT_USER).slice().sort((a,b)=> a.date<b.date?-1:1);
+  set('heroWeight', weights.length?weights[weights.length-1].kg:'—');
+  set('heroWeightDelta', weights.length?seriesDelta(weights.map(w=>w.kg)):'');
+  const ht=document.getElementById('heroTime'); if(ht) ht.innerHTML=fmtMinHtml(wk.reduce((s,e)=>s+durToMin(e.dur),0));
+  const bser=weekBalSeries().filter(x=>x!=null);
+  if(bser.length){ const sum=bser.reduce((a,b)=>a+b,0); set('heroMaint', (sum<=0?'-':'+')+Math.abs(sum/1000).toFixed(1)+'k'); }
+  else set('heroMaint','—');
 }
 
 /* ---------- profile + maintenance (Katch-McArdle, mock — no auth/persistence) ---------- */
