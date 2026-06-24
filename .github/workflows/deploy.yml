@@ -1,0 +1,43 @@
+name: Deploy to GitHub Pages
+
+# 静的サイト（単一 index.html / ビルド工程なし）を GitHub Pages へ公開する。
+# main へ push されると、リポジトリ内容をそのまま Pages アーティファクトとして配信する。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時デプロイは1本に絞る（古い実行はキャンセル）
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      # ビルド不要：リポジトリ直下（index.html を含む）をそのままアップロード。
+      # Vite 等のビルドを導入した場合は path を 'dist' に変更し、
+      # このステップの前に npm ci && npm run build を追加する。
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

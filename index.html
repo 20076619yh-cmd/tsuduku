@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>つづく — 仲間と続ける運動ログ</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          bg:     '#FAFAF8',
+          card:   '#FFFFFF',
+          line:   '#ECEBE7',
+          ink:    '#181D1A',
+          sub:    '#6E736C',
+          faint:  '#A2A69F',
+          accent: '#14B87C',
+          asoft:  '#E8F6EF',
+          aline:  '#CDEBDD',
+        },
+        fontFamily: { sans:['"Plus Jakarta Sans"','"Noto Sans JP"','system-ui','sans-serif'] },
+        boxShadow: {
+          card: '0 1px 2px rgba(24,29,26,0.04)',
+          lift: '0 6px 20px rgba(24,29,26,0.07)',
+        }
+      }
+    }
+  }
+</script>
+<style>
+  html,body{ -webkit-font-smoothing:antialiased; }
+  body{ font-family:'Plus Jakarta Sans','Noto Sans JP',system-ui,sans-serif; background:#E9E8E3; }
+  .phone-scroll::-webkit-scrollbar,.nowrap-scroll::-webkit-scrollbar{ display:none; }
+  .phone-scroll,.nowrap-scroll{ -ms-overflow-style:none; scrollbar-width:none; }
+  .page{ display:none; animation:fade .28s ease; }
+  .page.active{ display:block; }
+  @keyframes fade{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  .nav-btn.active .nav-ico{ color:#14B87C; }
+  .nav-btn.active .nav-lbl{ color:#181D1A; font-weight:800; }
+  .pop{ transition:transform .12s ease; }
+  .pop:active{ transform:scale(.94); }
+  .react.reacted{ background:#E8F6EF !important; color:#14B87C !important; border-color:#CDEBDD !important; }
+  .seg-btn.active{ background:#181D1A; color:#fff; }
+  @media (prefers-reduced-motion: reduce){ .page{animation:none;} }
+</style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-0 sm:p-6">
+
+<div class="relative w-full max-w-[420px] h-[100dvh] sm:h-[860px] bg-bg sm:rounded-[42px] sm:shadow-[0_30px_80px_rgba(0,0,0,0.22)] sm:border-[9px] sm:border-[#15120f] overflow-hidden flex flex-col">
+
+  <!-- app bar -->
+  <header class="shrink-0 px-5 pt-4 pb-3 bg-bg/92 backdrop-blur z-20 border-b border-line/60">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-[10px] bg-ink flex items-center justify-center">
+          <span class="text-white text-[14px] font-extrabold">続</span>
+        </div>
+        <h1 class="text-[16px] font-extrabold text-ink tracking-tight">つづく</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="pop w-8 h-8 rounded-full flex items-center justify-center text-sub">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-[18px] h-[18px]"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        </button>
+        <div class="w-8 h-8 rounded-full flex items-center justify-center text-white text-[13px] font-bold" style="background:#14B87C">ボ</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="phone-scroll flex-1 overflow-y-auto px-5 pb-28">
+
+    <!-- ============ FEED (default) ============ -->
+    <section id="feed" class="page active">
+      <div class="flex items-end justify-between mt-3 mb-4">
+        <h2 class="text-[24px] font-extrabold text-ink tracking-tight">記録</h2>
+        <div class="flex items-center gap-2 text-sub">
+          <div class="flex -space-x-2" id="feedAvatars"></div>
+          <span class="text-[12px] font-bold">きょう 3件</span>
+        </div>
+      </div>
+      <div id="feedList" class="space-y-3"></div>
+      <p class="text-center text-[12px] text-faint mt-7 mb-2">これより前の記録はありません</p>
+    </section>
+
+    <!-- ============ SCHEDULE ============ -->
+    <section id="schedule" class="page">
+      <div class="flex items-end justify-between mt-3 mb-4">
+        <h2 class="text-[24px] font-extrabold text-ink tracking-tight">予定</h2>
+        <button class="pop text-[12px] font-bold text-white bg-accent px-3.5 py-2 rounded-full">＋ 宣言する</button>
+      </div>
+
+      <div id="weekStrip" class="nowrap-scroll flex gap-2 overflow-x-auto pb-1 mb-5"></div>
+
+      <div class="flex items-center gap-4 rounded-2xl bg-card border border-line shadow-card p-4 mb-5">
+        <div class="relative shrink-0" style="width:60px;height:60px">
+          <svg width="60" height="60" viewBox="0 0 60 60">
+            <circle cx="30" cy="30" r="25" fill="none" stroke="#ECEBE7" stroke-width="5"/>
+            <circle cx="30" cy="30" r="25" fill="none" stroke="#14B87C" stroke-width="5" stroke-linecap="round" stroke-dasharray="157.1" stroke-dashoffset="47.1" transform="rotate(-90 30 30)"/>
+          </svg>
+          <div class="absolute inset-0 flex items-center justify-center">
+            <span class="text-[15px] font-extrabold text-ink leading-none">70<span class="text-[9px] text-faint">%</span></span>
+          </div>
+        </div>
+        <div class="flex-1">
+          <p class="text-[13px] font-extrabold text-ink mb-0.5">今週の予定達成率</p>
+          <p class="text-[11px] text-faint">7 / 10回 達成 ・ あと3回でコンプリート</p>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-card border border-line shadow-card p-4 mb-5">
+        <p class="text-[13px] font-extrabold text-ink mb-0.5">きょう、誰が何をする？</p>
+        <p class="text-[11px] text-faint mb-3.5">先に宣言＝サボれない</p>
+        <div id="intentRow" class="nowrap-scroll flex gap-5 overflow-x-auto"></div>
+      </div>
+
+      <p class="text-[12px] font-bold text-sub mb-2.5 ml-0.5">きょうの予定</p>
+      <div id="planList" class="space-y-2.5"></div>
+    </section>
+
+    <!-- ============ PROGRESS (のび) ============ -->
+    <section id="progress" class="page">
+      <div class="flex items-end justify-between mt-3 mb-4">
+        <h2 class="text-[24px] font-extrabold text-ink tracking-tight">のび</h2>
+        <div class="flex bg-card border border-line rounded-full p-0.5">
+          <button class="seg-btn active text-[12px] font-bold px-3.5 py-1.5 rounded-full" data-seg="week">週</button>
+          <button class="seg-btn text-[12px] font-bold px-3.5 py-1.5 rounded-full text-sub" data-seg="month">月</button>
+        </div>
+      </div>
+
+      <!-- YOU first: clean big numbers -->
+      <div class="rounded-2xl bg-card border border-line shadow-card p-5 mb-3">
+        <div class="flex items-center gap-2.5 mb-4">
+          <div class="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[13px]" style="background:#14B87C">ボ</div>
+          <p class="text-[13px] font-bold text-sub">ぼーいの今週</p>
+        </div>
+        <div class="grid grid-cols-3 divide-x divide-line">
+          <div class="text-center px-1">
+            <p class="text-[11px] text-faint font-bold mb-1.5">運動日数</p>
+            <p class="text-[26px] font-extrabold text-ink leading-none">4<span class="text-[12px] text-faint font-bold ml-0.5">日</span></p>
+          </div>
+          <div class="text-center px-1">
+            <p class="text-[11px] text-faint font-bold mb-1.5">連続記録</p>
+            <p class="text-[26px] font-extrabold text-accent leading-none">6<span class="text-[12px] text-faint font-bold ml-0.5">日</span></p>
+          </div>
+          <div class="text-center px-1">
+            <p class="text-[11px] text-faint font-bold mb-1.5">体重</p>
+            <p class="text-[26px] font-extrabold text-ink leading-none">71.0</p>
+            <p class="text-[10px] text-accent font-bold mt-1">▼0.8kg</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 divide-x divide-line mt-4 pt-4 border-t border-line">
+          <div class="text-center px-1">
+            <p class="text-[10px] text-faint font-bold mb-1">総運動時間</p>
+            <p class="text-[15px] font-extrabold text-ink leading-none">5<span class="text-[10px] text-faint font-bold">時間</span>20<span class="text-[10px] text-faint font-bold">分</span></p>
+          </div>
+          <div class="text-center px-1">
+            <p class="text-[10px] text-faint font-bold mb-1">予定達成率</p>
+            <p class="text-[15px] font-extrabold text-ink leading-none">80<span class="text-[10px] text-faint font-bold">%</span></p>
+          </div>
+          <div class="text-center px-1">
+            <p class="text-[10px] text-faint font-bold mb-1">メンテ差分</p>
+            <p class="text-[15px] font-extrabold text-accent leading-none">-1.4<span class="text-[10px] text-faint font-bold">k</span></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- weight -->
+      <div class="rounded-2xl bg-card border border-line shadow-card p-4 mb-3">
+        <div class="flex items-center justify-between mb-3">
+          <p class="text-[13px] font-extrabold text-ink">体重のうごき</p>
+          <p id="weightDelta" class="text-[12px] font-bold text-accent">-0.8kg</p>
+        </div>
+        <canvas id="weightChart" height="148"></canvas>
+      </div>
+
+      <!-- exercise days -->
+      <div class="rounded-2xl bg-card border border-line shadow-card p-4 mb-3">
+        <div class="flex items-center justify-between mb-3">
+          <p class="text-[13px] font-extrabold text-ink">運動日数</p>
+          <p class="text-[11px] text-faint">週ごと・直近8週</p>
+        </div>
+        <canvas id="daysChart" height="148"></canvas>
+      </div>
+
+      <!-- group, minimal -->
+      <div class="rounded-2xl bg-card border border-line shadow-card p-4">
+        <p class="text-[12px] font-bold text-sub mb-3">仲間のうごき（今週）</p>
+        <div id="groupRow" class="space-y-3"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- bottom nav -->
+  <nav class="absolute bottom-0 inset-x-0 bg-card/96 backdrop-blur border-t border-line px-7 pt-2.5 pb-5 flex justify-around z-30">
+    <button class="nav-btn flex flex-col items-center gap-1 w-20" data-page="schedule">
+      <span class="nav-ico text-faint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-[23px] h-[23px]"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span>
+      <span class="nav-lbl text-[11px] font-bold text-faint">予定</span>
+    </button>
+    <button class="nav-btn active flex flex-col items-center gap-1 w-20" data-page="feed">
+      <span class="nav-ico text-faint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-[23px] h-[23px]"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></span>
+      <span class="nav-lbl text-[11px] font-bold text-faint">記録</span>
+    </button>
+    <button class="nav-btn flex flex-col items-center gap-1 w-20" data-page="progress">
+      <span class="nav-ico text-faint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-[23px] h-[23px]"><path d="M4 19V5M4 19h16"/><path d="M7 15l3.5-4 3 2.5L21 7"/></svg></span>
+      <span class="nav-lbl text-[11px] font-bold text-faint">のび</span>
+    </button>
+  </nav>
+
+</div>
+
+<script>
+/* ---------- members ---------- */
+const members = {
+  boy:   { name:'ぼーい', ini:'ボ', c:'#14B87C' },
+  yuki:  { name:'ゆき',   ini:'ユ', c:'#4E86C4' },
+  taichi:{ name:'たいち', ini:'タ', c:'#E8714C' },
+  mio:   { name:'みお',   ini:'ミ', c:'#8B7BD0' },
+};
+const tagDot = {
+  '胸トレ':'#FF6A3D','背中':'#3E86C9','脚':'#7C6CD0',
+  '肩・腕':'#E0A53A','有酸素':'#14B87C','休養':'#9AA09A'
+};
+function avatar(m,size=40){
+  return `<div style="width:${size}px;height:${size}px;background:${m.c}" class="rounded-full flex items-center justify-center text-white font-bold shrink-0"><span style="font-size:${Math.round(size*0.4)}px">${m.ini}</span></div>`;
+}
+function chip(tag,status){
+  const dot=tagDot[tag]||'#9AA09A';
+  const d=`<span class="w-1.5 h-1.5 rounded-full" style="background:${dot}"></span>`;
+  const base='inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full';
+  if(status==='done')    return `<span class="${base} text-ink bg-asoft border border-aline">${d}${tag}<span class="text-accent text-[12px] leading-none">✓</span></span>`;
+  if(status==='changed') return `<span class="${base} text-ink bg-[#F3F2EE]">${d}${tag}<span class="text-[9px] font-extrabold text-[#E0A53A] bg-[#FBF3E0] px-1 py-0.5 rounded leading-none">変更</span></span>`;
+  if(status==='todo')    return `<span class="${base} text-faint bg-card border border-dashed border-line">${d}${tag}</span>`;
+  return `<span class="${base} text-ink bg-[#F3F2EE]">${d}${tag}</span>`;
+}
+function hudCell(label,val,color){
+  return `<div class="py-2 px-1 text-center"><p class="text-[9px] text-faint font-bold mb-0.5">${label}</p><p class="text-[13px] font-extrabold leading-none" style="color:${color}">${val}</p></div>`;
+}
+
+/* ---------- FEED ---------- */
+const posts = [
+  { who:'yuki', time:'7:20', tags:['有酸素'], cal:'-280', calNeg:true, dur:'42分', burn:'280', intake:'1,650', ph:'linear-gradient(135deg,#EEF3F0,#E6EFEA)', phIco:'🏃',
+    text:'朝ラン5km完了。今日は脚が軽い', r:{fire:5,muscle:2,clap:3} },
+  { who:'taichi', time:'12:40', tags:['胸トレ','肩・腕'], cal:'+150', calNeg:false, dur:'65分', burn:'320', intake:'2,300', ph:'linear-gradient(135deg,#F1EFEC,#ECE9E4)', phIco:'🏋️',
+    text:'昼ジム。ベンチ自己ベスト更新。昼は鶏むね', r:{fire:8,muscle:6,clap:2} },
+  { who:'boy', time:'19:05', tags:['背中'], cal:'-420', calNeg:true, dur:'58分', burn:'420', intake:'1,900', ph:'linear-gradient(135deg,#EDEFF2,#E7EBEF)', phIco:'💪',
+    text:'背中の日。懸垂やっと10回いけた', r:{fire:3,muscle:9,clap:4} },
+];
+function renderFeedAvatars(){
+  document.getElementById('feedAvatars').innerHTML =
+    ['taichi','yuki','boy'].map(k=>`<div class="ring-2 ring-bg rounded-full">${avatar(members[k],24)}</div>`).join('');
+}
+function renderFeed(){
+  document.getElementById('feedList').innerHTML = posts.map((p,i)=>{
+    const m=members[p.who];
+    const calColor = p.calNeg ? '#14B87C' : '#6E736C';
+    return `
+    <article class="rounded-2xl bg-card border border-line shadow-card overflow-hidden">
+      <div class="flex items-center gap-3 px-4 pt-3.5">
+        ${avatar(m,38)}
+        <div class="flex-1">
+          <p class="text-[14px] font-extrabold text-ink leading-none">${m.name}</p>
+          <p class="text-[11px] text-faint mt-1">きょう ${p.time}</p>
+        </div>
+        <div class="flex gap-1.5">${p.tags.map(t=>chip(t)).join('')}</div>
+      </div>
+      <div class="px-4 pt-3">
+        <div class="rounded-xl h-44 flex items-center justify-center" style="background:${p.ph}">
+          <span style="font-size:42px;opacity:.32">${p.phIco}</span>
+        </div>
+      </div>
+      <div class="px-4 pt-3 pb-1">
+        <p class="text-[14px] text-ink leading-snug">${p.text}</p>
+        <div class="mt-3 grid grid-cols-4 rounded-xl bg-bg border border-line divide-x divide-line overflow-hidden">
+          ${hudCell('実施', p.dur, '#181D1A')}
+          ${hudCell('消費', p.burn, '#181D1A')}
+          ${hudCell('摂取', p.intake, '#181D1A')}
+          ${hudCell('メンテ', p.cal, calColor)}
+        </div>
+      </div>
+      <div class="flex gap-2 px-4 py-3">
+        ${reactBtn(i,'fire','🔥',p.r.fire)}
+        ${reactBtn(i,'muscle','💪',p.r.muscle)}
+        ${reactBtn(i,'clap','👏',p.r.clap)}
+      </div>
+    </article>`;
+  }).join('');
+}
+function reactBtn(i,key,emo,n){
+  return `<button class="react pop flex items-center gap-1.5 border border-line bg-card px-3 py-1.5 rounded-full text-[13px] font-bold text-sub" data-i="${i}" data-k="${key}"><span>${emo}</span><span class="cnt">${n}</span></button>`;
+}
+
+/* ---------- SCHEDULE ---------- */
+const week = [
+  {d:'月',n:18},{d:'火',n:19},{d:'水',n:20,today:true},{d:'木',n:21},{d:'金',n:22},{d:'土',n:23},{d:'日',n:24}
+];
+function renderWeek(){
+  document.getElementById('weekStrip').innerHTML = week.map(w=>`
+    <button class="day-pill pop shrink-0 w-[48px] py-3 rounded-2xl flex flex-col items-center gap-1.5 border ${w.today?'bg-ink border-ink':'bg-card border-line'}">
+      <span class="text-[11px] font-bold ${w.today?'text-white/70':'text-faint'}">${w.d}</span>
+      <span class="day-num text-[16px] font-extrabold ${w.today?'text-white':'text-ink'}">${w.n}</span>
+      <span class="w-1 h-1 rounded-full ${w.today?'bg-accent':'bg-line'}"></span>
+    </button>`).join('');
+}
+const intents = [
+  {who:'boy', tag:'背中'}, {who:'yuki', tag:'有酸素'}, {who:'taichi', tag:'胸トレ'}, {who:'mio', tag:'脚'}
+];
+function renderIntent(){
+  document.getElementById('intentRow').innerHTML = intents.map(it=>{
+    const m=members[it.who];
+    return `<div class="flex flex-col items-center gap-2 shrink-0 w-[52px]">
+      <div class="relative">${avatar(m,44)}
+        <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ring-2 ring-card" style="background:${tagDot[it.tag]}"></span>
+      </div>
+      <span class="text-[11px] font-bold text-ink leading-none">${m.name}</span>
+      <span class="text-[10px] font-bold text-sub leading-none">${it.tag}</span>
+    </div>`;
+  }).join('');
+}
+const plans = [
+  {who:'taichi', tag:'胸トレ', time:'12:30', status:'done'},
+  {who:'yuki',   tag:'有酸素', time:'7:00',  status:'done'},
+  {who:'boy',    tag:'背中',  time:'19:00', status:'changed', note:'21:00→19:00'},
+  {who:'mio',    tag:'脚',    time:'21:00', status:'todo'},
+];
+function renderPlans(){
+  const stat = {
+    done:   {label:'実施済み', cls:'text-accent',    dot:'#14B87C', dim:false, check:true},
+    planned:{label:'これから', cls:'text-ink',       dot:'#E0A53A', dim:false, check:false},
+    changed:{label:'予定変更', cls:'text-[#E0A53A]', dot:'#E0A53A', dim:false, check:false},
+    todo:   {label:'未実施',   cls:'text-faint',     dot:'#D2D5CF', dim:true,  check:false},
+  };
+  document.getElementById('planList').innerHTML = plans.map(p=>{
+    const m=members[p.who]; const s=stat[p.status];
+    return `<div class="flex items-center gap-3 rounded-2xl bg-card border border-line shadow-card p-3.5 ${s.dim?'opacity-60':''}">
+      ${avatar(m,40)}
+      <div class="flex-1">
+        <div class="flex items-center gap-2">
+          <span class="text-[14px] font-extrabold text-ink">${m.name}</span>${chip(p.tag, p.status==='planned'?'':p.status)}
+        </div>
+        <p class="text-[11px] text-faint mt-1">予定 ${p.time}${p.note?` ・ <span class="font-bold text-[#E0A53A]">${p.note}</span>`:''}</p>
+      </div>
+      <span class="flex items-center gap-1.5 text-[12px] font-bold ${s.cls}">
+        <span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.check?'✓ ':''}${s.label}
+      </span>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- PROGRESS group ---------- */
+const groupWeek = [{who:'yuki',d:5},{who:'taichi',d:4},{who:'mio',d:3}];
+function renderGroup(){
+  document.getElementById('groupRow').innerHTML = groupWeek.map(g=>{
+    const m=members[g.who]; const pct=Math.round(g.d/7*100);
+    return `<div class="flex items-center gap-3">
+      ${avatar(m,26)}
+      <span class="text-[12px] font-bold text-ink w-11">${m.name}</span>
+      <div class="flex-1 h-1.5 rounded-full bg-[#F0EFEB] overflow-hidden"><div class="h-full rounded-full" style="width:${pct}%;background:${m.c}"></div></div>
+      <span class="text-[12px] font-extrabold text-sub w-8 text-right">${g.d}日</span>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- charts ---------- */
+let charts={}; let chartsReady=false;
+const weightData = {
+  week:  { labels:['月','火','水','木','金','土','日'], data:[71.8,71.6,71.7,71.3,71.1,70.9,71.0], delta:'-0.8kg' },
+  month: { labels:['7週前','6','5','4','3','2','先週','今週'], data:[73.2,72.8,72.4,72.0,71.7,71.4,71.1,71.0], delta:'-2.2kg' },
+};
+function initCharts(){
+  if(chartsReady) return; chartsReady=true;
+  Chart.defaults.font.family="'Plus Jakarta Sans','Noto Sans JP'";
+  Chart.defaults.color='#A2A69F';
+
+  const w=weightData.week;
+  charts.weight = new Chart(document.getElementById('weightChart'), {
+    type:'line',
+    data:{ labels:w.labels, datasets:[{ data:w.data,
+      borderColor:'#14B87C', borderWidth:2.5, tension:.4,
+      pointBackgroundColor:'#14B87C', pointRadius:3.5, pointHoverRadius:5, fill:true,
+      backgroundColor:(c)=>{const g=c.chart.ctx.createLinearGradient(0,0,0,148);g.addColorStop(0,'rgba(20,184,124,.12)');g.addColorStop(1,'rgba(20,184,124,0)');return g;} }]},
+    options:{ plugins:{legend:{display:false}}, scales:{
+      y:{grid:{color:'#F2F1ED'},border:{display:false},ticks:{stepSize:0.5,font:{size:10}}},
+      x:{grid:{display:false},border:{display:false},ticks:{font:{size:11}}} }, maintainAspectRatio:false }
+  });
+
+  charts.days = new Chart(document.getElementById('daysChart'), {
+    type:'bar',
+    data:{ labels:['7週前','6','5','4','3','2','先週','今週'],
+      datasets:[{ data:[3,4,2,5,4,3,5,4],
+        backgroundColor:(c)=> c.dataIndex===c.dataset.data.length-1 ? '#14B87C' : '#DDE3DF',
+        borderRadius:6, barThickness:15 }]},
+    options:{ plugins:{legend:{display:false}}, scales:{
+      y:{grid:{color:'#F2F1ED'},border:{display:false},ticks:{stepSize:1,font:{size:10}},suggestedMax:7},
+      x:{grid:{display:false},border:{display:false},ticks:{font:{size:11}}} }, maintainAspectRatio:false }
+  });
+}
+function updateWeight(mode){
+  if(!charts.weight) return;
+  const d=weightData[mode];
+  charts.weight.data.labels=d.labels;
+  charts.weight.data.datasets[0].data=d.data;
+  charts.weight.update();
+  document.getElementById('weightDelta').textContent=d.delta;
+}
+
+/* ---------- nav + interactions ---------- */
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===id));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===id));
+  document.querySelector('main').scrollTop=0;
+  if(id==='progress') setTimeout(initCharts,60);
+}
+document.querySelectorAll('.nav-btn').forEach(b=> b.addEventListener('click',()=>showPage(b.dataset.page)));
+
+document.addEventListener('click',e=>{
+  const r=e.target.closest('.react');
+  if(r){
+    const cnt=r.querySelector('.cnt');
+    if(!r.classList.contains('reacted')){ r.classList.add('reacted'); cnt.textContent=(+cnt.textContent)+1; }
+    else{ r.classList.remove('reacted'); cnt.textContent=(+cnt.textContent)-1; }
+  }
+  const seg=e.target.closest('.seg-btn');
+  if(seg){
+    document.querySelectorAll('.seg-btn').forEach(s=>{s.classList.remove('active');s.classList.add('text-sub');});
+    seg.classList.add('active'); seg.classList.remove('text-sub');
+    updateWeight(seg.dataset.seg);
+  }
+  const day=e.target.closest('.day-pill');
+  if(day){
+    document.querySelectorAll('.day-pill').forEach(d=>{
+      d.classList.remove('bg-ink','border-ink'); d.classList.add('bg-card','border-line');
+      const num=d.querySelector('.day-num'); if(num){num.classList.remove('text-white');num.classList.add('text-ink');}
+      const wd=d.querySelector('span'); if(wd){wd.classList.remove('text-white/70');wd.classList.add('text-faint');}
+    });
+    day.classList.add('bg-ink','border-ink'); day.classList.remove('bg-card','border-line');
+    const num=day.querySelector('.day-num'); if(num){num.classList.add('text-white');num.classList.remove('text-ink');}
+    const wd=day.querySelector('span'); if(wd){wd.classList.add('text-white/70');wd.classList.remove('text-faint');}
+  }
+});
+
+/* ---------- init ---------- */
+renderFeedAvatars(); renderFeed(); renderWeek(); renderIntent(); renderPlans(); renderGroup();
+</script>
+</body>
+</html>
