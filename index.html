@@ -732,23 +732,53 @@ function renderMonth(){
   }
   document.getElementById('monthGrid').innerHTML=cells;
 }
-// inline popup under the grid: who does what on the tapped day (no navigation)
+// inline popup under the grid (no navigation).
+// 過去日 = その日の「記録(実績)」: 運動・体重・食事を拾って表示。当日/未来 = 「予定」。
 function renderMonthDetail(){
   const el=document.getElementById('monthDetail'); if(!el) return;
   const {m,d}=parseYmd(selectedDate);
-  const items=logEntries.filter(e=>e.type==='workout'&&e.date===selectedDate);
-  const head=`<p class="text-[12px] font-bold text-sub mb-2.5">${m+1}月${d}日(${WD[wdIndex(selectedDate)]})・誰が何をする</p>`;
-  const body = items.length
-    ? `<div class="space-y-2.5">`+items.map(e=>{
-        const mem=members[e.who]; const s=planStat[e.status]||planStat.planned;
-        return `<div class="entry-edit pop cursor-pointer flex items-center gap-2.5" data-id="${e.id}">
-          ${avatar(mem,28)}
-          <span class="text-[12px] font-bold text-ink w-12 shrink-0">${mem.name}</span>
-          <div class="flex flex-wrap items-center gap-1.5">${(e.tags||[]).map(t=>chip(t)).join('')}</div>
-          <span class="ml-auto flex items-center gap-1 text-[11px] font-bold ${s.cls} shrink-0"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.check?'✓':''}${s.label}</span>
-        </div>`;
-      }).join('')+`</div>`
-    : `<p class="text-[11px] text-faint">この日の予定はまだありません</p>`;
+  const dateLabel=`${m+1}月${d}日(${WD[wdIndex(selectedDate)]})`;
+  const workouts=logEntries.filter(e=>e.type==='workout'&&e.date===selectedDate);
+  const isPast=selectedDate<TODAY;
+  let head, body;
+  if(isPast){
+    // actuals as of that day: workout 実績 + 体重 + 食事
+    head=`<p class="text-[12px] font-bold text-sub mb-2.5">${dateLabel} の記録</p>`;
+    const weight=logEntries.find(e=>e.type==='weight'&&e.who===CURRENT_USER&&e.date===selectedDate);
+    const meal=logEntries.find(e=>e.type==='meal'&&e.who===CURRENT_USER&&e.date===selectedDate);
+    const rows=[];
+    workouts.forEach(e=>{
+      const mem=members[e.who]; const s=planStat[e.status]||planStat.done;
+      const durTxt=e.dur?`<span class="text-[11px] font-bold text-sub shrink-0">${e.dur}</span>`:`<span class="flex items-center gap-1 text-[11px] font-bold ${s.cls} shrink-0"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.check?'✓':''}${s.label}</span>`;
+      rows.push(`<div class="entry-edit pop cursor-pointer flex items-center gap-2.5" data-id="${e.id}">
+        ${avatar(mem,28)}
+        <span class="text-[12px] font-bold text-ink w-12 shrink-0">${mem.name}</span>
+        <div class="flex flex-wrap items-center gap-1.5">${(e.tags||[]).map(t=>chip(t)).join('')}</div>
+        <span class="ml-auto">${durTxt}</span>
+      </div>`);
+    });
+    if(weight) rows.push(`<div class="entry-edit pop cursor-pointer flex items-center gap-2.5" data-id="${weight.id}">
+      <span class="text-[13px] shrink-0">⚖</span><span class="text-[12px] font-bold text-sub">体重</span>
+      <span class="ml-auto text-[13px] font-extrabold text-ink">${weight.kg}<span class="text-[10px] text-faint font-bold ml-0.5">kg</span></span></div>`);
+    if(meal) rows.push(`<div class="entry-edit pop cursor-pointer flex items-center gap-2.5" data-id="${meal.id}">
+      <span class="text-[13px] shrink-0">🍽</span><span class="text-[12px] font-bold text-sub">摂取</span>
+      <span class="ml-auto text-[13px] font-extrabold text-ink">${meal.kcal}<span class="text-[10px] text-faint font-bold ml-0.5">kcal</span>${meal.protein!=null?` <span class="text-[11px] text-faint font-bold">P${meal.protein}g</span>`:''}</span></div>`);
+    body = rows.length ? `<div class="space-y-2.5">${rows.join('')}</div>` : `<p class="text-[11px] text-faint">この日の記録はありません</p>`;
+  }else{
+    // today / future = plan ("誰が何をする")
+    head=`<p class="text-[12px] font-bold text-sub mb-2.5">${dateLabel}・誰が何をする</p>`;
+    body = workouts.length
+      ? `<div class="space-y-2.5">`+workouts.map(e=>{
+          const mem=members[e.who]; const s=planStat[e.status]||planStat.planned;
+          return `<div class="entry-edit pop cursor-pointer flex items-center gap-2.5" data-id="${e.id}">
+            ${avatar(mem,28)}
+            <span class="text-[12px] font-bold text-ink w-12 shrink-0">${mem.name}</span>
+            <div class="flex flex-wrap items-center gap-1.5">${(e.tags||[]).map(t=>chip(t)).join('')}</div>
+            <span class="ml-auto flex items-center gap-1 text-[11px] font-bold ${s.cls} shrink-0"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.check?'✓':''}${s.label}</span>
+          </div>`;
+        }).join('')+`</div>`
+      : `<p class="text-[11px] text-faint">この日の予定はまだありません</p>`;
+  }
   el.innerHTML=`<div class="rounded-2xl bg-card border border-line shadow-card p-3.5">${head}${body}</div>`;
   el.classList.remove('hidden');
 }
