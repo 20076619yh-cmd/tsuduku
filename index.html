@@ -450,6 +450,7 @@ function addPost(p){ posts.unshift(p); renderFeed(); }
 
 /* ---------- workout timer (E2) + post flow (E) ---------- */
 let timerRunning=false, timerSec=0, timerInterval=null, timerTags=[];
+let timerFromPlan=false;    // true=今日の予定から開始（既存エントリを更新）／false=予定なし開始（新規追加）
 let startTags=[];           // category-select (no-plan start)
 let pendingPhoto=null, postCtx=null;
 const START_CATS=['胸トレ','背中','脚','肩・腕','有酸素','ストレッチ'];
@@ -474,8 +475,8 @@ function startTimer(tags){
 function onStartWorkout(){
   const todays=logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&e.date===TODAY);
   const tags=[...new Set(todays.flatMap(e=>e.tags||[]))];
-  if(tags.length) startTimer(tags);
-  else { startTags=[]; renderStartTags(); document.getElementById('startScrim').classList.remove('hidden'); document.getElementById('startSheet').classList.add('open'); }
+  if(tags.length){ timerFromPlan=true; startTimer(tags); }
+  else { timerFromPlan=false; startTags=[]; renderStartTags(); document.getElementById('startScrim').classList.remove('hidden'); document.getElementById('startSheet').classList.add('open'); }
 }
 function closeStartSheet(){ document.getElementById('startSheet').classList.remove('open'); document.getElementById('startScrim').classList.add('hidden'); }
 function renderStartTags(){
@@ -483,14 +484,20 @@ function renderStartTags(){
     `<button class="start-tag pop text-[12px] font-bold px-3 py-2 rounded-full border ${startTags.includes(t)?'sel':'border-line text-ink bg-card'}" data-tag="${t}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style="background:${tagDot[t]||'#9AA09A'}"></span>${t}</button>`
   ).join('');
 }
-function onStartGo(){ if(!startTags.length) return; closeStartSheet(); startTimer(startTags); }
+function onStartGo(){ if(!startTags.length) return; timerFromPlan=false; closeStartSheet(); startTimer(startTags); }
 function onStopWorkout(){
   if(timerInterval) clearInterval(timerInterval);
   timerRunning=false;
   const dur=durFromSec(timerSec);
   renderStartBar();
-  // (1) record the workout so it counts: calendar dots / 運動日数 reflect it
-  logEntries.push({id:newId(), date:TODAY, type:'workout', who:CURRENT_USER, tags:timerTags.slice(), time:'いま', dur, status:'done'});
+  // (1) record the workout so it counts. 予定から開始なら今日の自分の予定を実施済みに更新（重複追加しない）。
+  //     予定なし開始の時だけ新規エントリを追加する。
+  const todays=logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&e.date===TODAY);
+  if(timerFromPlan && todays.length){
+    todays.forEach(e=>{ e.status='done'; e.dur=dur; });
+  }else{
+    logEntries.push({id:newId(), date:TODAY, type:'workout', who:CURRENT_USER, tags:timerTags.slice(), time:'いま', dur, status:'done'});
+  }
   rerenderAfterChange();
   // (2) open the share (post) flow with the same tags + measured time
   openPostSheet(timerTags, dur);
