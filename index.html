@@ -136,10 +136,13 @@
       <div id="dayWeight" class="mb-2.5"></div>
       <div id="planList" class="space-y-2.5"></div>
 
-      <!-- nutrition goals: thin progress, no shame -->
+      <!-- today's meal input (intake feeds the 記録 calorie-balance graph) -->
       <div class="rounded-2xl bg-card border border-line shadow-card p-4 mt-5">
-        <p class="text-[13px] font-extrabold text-ink mb-3.5">今週の食事ゴール</p>
-        <div id="nutritionList" class="space-y-3.5"></div>
+        <div class="flex items-center justify-between mb-3">
+          <p id="mealLabel" class="text-[13px] font-extrabold text-ink">本日の食事</p>
+          <button class="meal-add pop text-[11px] font-bold text-accent">＋ 入力</button>
+        </div>
+        <div id="mealSummary"></div>
       </div>
 
       <!-- self rules (limits) with per-item privacy + add/edit, streak, resist -->
@@ -287,6 +290,7 @@
     <div class="flex bg-bg border border-line rounded-full p-0.5 mb-4">
       <button class="sf-type active flex-1 text-[12px] font-bold py-2 rounded-full" data-sftype="workout">運動</button>
       <button class="sf-type flex-1 text-[12px] font-bold py-2 rounded-full text-sub" data-sftype="weight">体重</button>
+      <button class="sf-type flex-1 text-[12px] font-bold py-2 rounded-full text-sub" data-sftype="meal">食事</button>
     </div>
     <label class="block text-[11px] font-bold text-faint mb-1.5">日付</label>
     <input id="sfDate" type="date" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-4">
@@ -299,6 +303,17 @@
     <div id="sfWeight" class="hidden">
       <label class="block text-[11px] font-bold text-faint mb-1.5">体重 (kg)</label>
       <input id="sfKg" type="number" step="0.1" inputmode="decimal" placeholder="71.0" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-1">
+    </div>
+    <div id="sfMeal" class="hidden">
+      <label class="block text-[11px] font-bold text-faint mb-1.5">摂取カロリー (kcal)</label>
+      <input id="sfKcal" type="number" inputmode="numeric" placeholder="1850" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-4">
+      <label class="block text-[11px] font-bold text-faint mb-1.5">タンパク質 (g)</label>
+      <input id="sfProtein" type="number" inputmode="numeric" placeholder="120" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-4">
+      <div class="grid grid-cols-2 gap-2">
+        <div><label class="block text-[11px] font-bold text-faint mb-1.5">脂質 (g)・任意</label><input id="sfFat" type="number" inputmode="numeric" placeholder="—" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink"></div>
+        <div><label class="block text-[11px] font-bold text-faint mb-1.5">炭水化物 (g)・任意</label><input id="sfCarbs" type="number" inputmode="numeric" placeholder="—" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink"></div>
+      </div>
+      <p class="text-[10px] text-faint mt-2">食品DB検索なし。数字をざっくり入れるだけ。摂取kcalは記録のカロリー収支に反映</p>
     </div>
     <button id="sheetConfirm" class="pop w-full mt-3 bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">決定</button>
   </div>
@@ -513,6 +528,7 @@ const logEntries = [
   {date:'2026-06-20', type:'weight', who:'boy', kg:71.0},
   {date:'2026-06-18', type:'weight', who:'boy', kg:71.3},
   {date:'2026-06-16', type:'weight', who:'boy', kg:71.6},
+  {date:'2026-06-20', type:'meal', who:'boy', kcal:1850, protein:120, fat:55, carbs:180},
 ];
 const planStat = {
   done:   {label:'実施済み', cls:'text-accent',    dot:'#14B87C', dim:false, check:true},
@@ -554,6 +570,7 @@ function renderDayList(){
          <p class="text-[12px] text-faint font-bold">まだ予定がありません</p>
          <p class="text-[11px] text-faint mt-1">「＋追記」で宣言できます</p>
        </div>`;
+  if(typeof renderMeal==='function') renderMeal();
 }
 function renderMonth(){
   const {y,m}=calCursor;
@@ -609,6 +626,7 @@ function setSheetType(t){
   });
   document.getElementById('sfWorkout').classList.toggle('hidden',t!=='workout');
   document.getElementById('sfWeight').classList.toggle('hidden',t!=='weight');
+  document.getElementById('sfMeal').classList.toggle('hidden',t!=='meal');
 }
 function renderSheetTags(){
   document.getElementById('sfTags').innerHTML=SHEET_TAGS.map(t=>
@@ -632,34 +650,43 @@ function confirmSheet(){
   if(sfType==='workout'){
     const time=document.getElementById('sfTime').value||'—';
     logEntries.push({date,type:'workout',who:CURRENT_USER,tag:sfTag,time,status: date<TODAY?'done':'planned'});
-  }else{
+  }else if(sfType==='weight'){
     const kg=parseFloat(document.getElementById('sfKg').value);
     if(!isNaN(kg)){
       const ex=logEntries.find(e=>e.type==='weight'&&e.who===CURRENT_USER&&e.date===date);
       if(ex) ex.kg=kg; else logEntries.push({date,type:'weight',who:CURRENT_USER,kg});
     }
+  }else{ // meal
+    const kcal=parseInt(document.getElementById('sfKcal').value);
+    if(!isNaN(kcal)){
+      const num=id=>{const v=parseFloat(document.getElementById(id).value); return isNaN(v)?null:v;};
+      const rec={date,type:'meal',who:CURRENT_USER,kcal,protein:num('sfProtein'),fat:num('sfFat'),carbs:num('sfCarbs')};
+      const ex=logEntries.find(e=>e.type==='meal'&&e.who===CURRENT_USER&&e.date===date);
+      if(ex) Object.assign(ex,rec); else logEntries.push(rec);
+    }
   }
   selectedDate=date;
   closeSheet();
-  renderWeek(); if(schedView==='month') renderMonth(); renderDayList();
+  renderWeek(); if(schedView==='month') renderMonth(); renderDayList(); renderMeal();
+  if(chartsReady) updateWeight(chartMode);
 }
 
-/* ---------- SCHEDULE: nutrition / limits (type-tagged items) ---------- */
-const nutritionGoals = [
-  {type:'nutrition_goal', label:'2000kcal以内の日', done:3, total:5},
-  {type:'nutrition_goal', label:'タンパク質120g達成', done:4, total:7},
-];
-function renderNutrition(){
-  document.getElementById('nutritionList').innerHTML = nutritionGoals.map(g=>{
-    const pct=Math.round(g.done/g.total*100);
-    return `<div>
-      <div class="flex items-center justify-between mb-1.5">
-        <span class="text-[12px] font-bold text-ink">${g.label}</span>
-        <span class="text-[11px] font-extrabold text-sub">${g.done}<span class="text-faint">/${g.total}日</span></span>
-      </div>
-      <div class="h-1.5 rounded-full bg-[#F0EFEB] overflow-hidden"><div class="h-full rounded-full bg-accent" style="width:${pct}%"></div></div>
-    </div>`;
-  }).join('');
+/* ---------- SCHEDULE: 本日の食事 / limits (type-tagged items) ---------- */
+// meal input lives in 予定; intake feeds the 記録 calorie-balance graph (週). 食品DB検索なし
+function renderMeal(){
+  const el=document.getElementById('mealSummary'); if(!el) return;
+  const {m,d}=parseYmd(selectedDate);
+  const lbl=document.getElementById('mealLabel');
+  if(lbl) lbl.textContent = selectedDate===TODAY ? '本日の食事' : `${m+1}月${d}日の食事`;
+  const meal=logEntries.find(e=>e.type==='meal'&&e.who===CURRENT_USER&&e.date===selectedDate);
+  if(!meal){
+    el.innerHTML=`<button class="meal-add pop w-full flex items-center justify-center gap-1.5 text-[12px] font-bold text-accent bg-card border border-dashed border-aline rounded-2xl py-3">＋ 食事を入力（摂取kcal・タンパク質 など）</button>`;
+    return;
+  }
+  const cell=(label,val,unit)=>{ const has=val!=null&&val!==''; return `<div class="text-center px-1"><p class="text-[10px] text-faint font-bold mb-1">${label}</p><p class="text-[14px] font-extrabold ${has?'text-ink':'text-faint'} leading-none">${has?val:'—'}${has?`<span class="text-[9px] text-faint font-bold">${unit}</span>`:''}</p></div>`; };
+  el.innerHTML=`<div class="grid grid-cols-4 divide-x divide-line">
+    ${cell('摂取',meal.kcal,'kcal')}${cell('P',meal.protein,'g')}${cell('F',meal.fat,'g')}${cell('C',meal.carbs,'g')}
+  </div>`;
 }
 
 // per-item privacy scopes (no-shame: private is just grey, never a warning)
@@ -723,7 +750,15 @@ function renderGroup(){
 }
 
 /* ---------- charts ---------- */
-let charts={}; let chartsReady=false;
+let charts={}; let chartsReady=false; let chartMode='week';
+// week calorie balance = real intake − maintenance where a meal was logged; else mock fallback (month stays mock)
+function weekBalSeries(){
+  const maint=maintenanceValue();
+  return week.map((w,i)=>{
+    const meal=logEntries.find(e=>e.type==='meal'&&e.who===CURRENT_USER&&e.date===w.date);
+    return meal ? Math.round(meal.kcal - maint) : weightData.week.bal[i];
+  });
+}
 const weightData = {
   week:  { labels:['月','火','水','木','金','土','日'], data:[71.8,71.6,71.7,71.3,71.1,70.9,71.0], bal:[-280,-150,120,-300,-420,-80,-280], delta:'-0.8kg' },
   // month bal = 1日あたり平均の収支（週合計ではなく正規化。週ビューと同尺度でグリッドが効く）
@@ -750,7 +785,7 @@ function initCharts(){
   // bottom panel: calorie balance bars (deficit=teal, surplus=neutral grey — no shame)
   charts.balance = new Chart(document.getElementById('balanceChart'), {
     type:'bar',
-    data:{ labels:w.labels, datasets:[{ data:w.bal,
+    data:{ labels:w.labels, datasets:[{ data:weekBalSeries(),
       backgroundColor:(c)=> (c.raw<=0 ? '#14B87C' : '#C9CEC6'),
       borderRadius:4, barThickness:14 }]},
     options:{ plugins:{legend:{display:false},tooltip:{enabled:false}}, scales:{
@@ -780,7 +815,7 @@ function updateWeight(mode){
   charts.weight.update();
   if(charts.balance){
     charts.balance.data.labels=d.labels;
-    charts.balance.data.datasets[0].data=d.bal;
+    charts.balance.data.datasets[0].data = mode==='week'?weekBalSeries():d.bal;
     charts.balance.update();
   }
   document.getElementById('weightDelta').textContent=d.delta;
@@ -859,6 +894,7 @@ document.addEventListener('click',e=>{
   if(seg){
     document.querySelectorAll('.seg-btn').forEach(s=>{s.classList.remove('active');s.classList.add('text-sub');});
     seg.classList.add('active'); seg.classList.remove('text-sub');
+    chartMode=seg.dataset.seg;
     updateWeight(seg.dataset.seg);
   }
   const ldel=e.target.closest('.limit-del');
@@ -869,6 +905,7 @@ document.addEventListener('click',e=>{
     limits[i].scope=(limits[i].scope+1)%scopes.length;
     renderLimits();
   }
+  if(e.target.closest('.meal-add')) openSheet('meal');
   if(e.target.closest('.rule-add')) openRule();
   if(e.target.closest('#ruleSave')) saveRule();
   if(e.target.closest('#ruleCancel')||e.target.closest('#ruleScrim')) closeRule();
@@ -910,7 +947,7 @@ document.addEventListener('input', e=>{ if(e.target.closest('#profileSheet')) up
 
 /* ---------- init ---------- */
 renderFeedAvatars(); renderFeed(); renderWeek(); renderDayList(); renderGroup();
-renderNutrition(); renderLimits(); renderMonth(); renderMaintCaption();
+renderMeal(); renderLimits(); renderMonth(); renderMaintCaption();
 </script>
 </body>
 </html>
