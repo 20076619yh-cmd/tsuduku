@@ -47,7 +47,12 @@
   .pop:active{ transform:scale(.94); }
   .react.reacted{ background:#E8F6EF !important; color:#14B87C !important; border-color:#CDEBDD !important; }
   .seg-btn.active{ background:#181D1A; color:#fff; }
-  @media (prefers-reduced-motion: reduce){ .page{animation:none;} }
+  .vseg.active,.sf-type.active{ background:#181D1A; color:#fff; }
+  .sf-tag.sel{ background:#181D1A; color:#fff; border-color:#181D1A; }
+  .sheet{ transform:translateY(110%); transition:transform .3s cubic-bezier(.4,0,.2,1); max-height:86%; overflow-y:auto; box-shadow:0 -8px 30px rgba(24,29,26,.12); }
+  .sheet.open{ transform:translateY(0); }
+  .sheet-scrim{ background:rgba(24,29,26,.35); }
+  @media (prefers-reduced-motion: reduce){ .page{animation:none;} .sheet{transition:none;} }
 </style>
 </head>
 <body class="min-h-screen flex items-center justify-center p-0 sm:p-6">
@@ -91,10 +96,35 @@
     <section id="schedule" class="page">
       <div class="flex items-end justify-between mt-3 mb-4">
         <h2 class="text-[24px] font-extrabold text-ink tracking-tight">予定</h2>
-        <button class="pop text-[12px] font-bold text-white bg-accent px-3.5 py-2 rounded-full">＋ 宣言する</button>
+        <button class="declare-btn pop text-[12px] font-bold text-white bg-accent px-3.5 py-2 rounded-full">＋ 宣言する</button>
+      </div>
+
+      <!-- week / month view toggle -->
+      <div class="flex bg-card border border-line rounded-full p-0.5 w-fit mb-4">
+        <button class="vseg active text-[12px] font-bold px-4 py-1.5 rounded-full" data-vview="week">週</button>
+        <button class="vseg text-[12px] font-bold px-4 py-1.5 rounded-full text-sub" data-vview="month">月</button>
       </div>
 
       <div id="weekStrip" class="nowrap-scroll flex gap-2 overflow-x-auto pb-1 mb-5"></div>
+
+      <!-- month calendar (toggles with week; Monday-first) -->
+      <div id="monthCal" class="hidden mb-5">
+        <div class="flex items-center justify-between mb-3">
+          <button data-mnav="prev" class="pop w-8 h-8 rounded-full border border-line bg-card flex items-center justify-center text-[16px] text-ink">‹</button>
+          <span id="monthLabel" class="text-[14px] font-extrabold text-ink"></span>
+          <button data-mnav="next" class="pop w-8 h-8 rounded-full border border-line bg-card flex items-center justify-center text-[16px] text-ink">›</button>
+        </div>
+        <div class="grid grid-cols-7 mb-1.5 text-center">
+          <span class="text-[10px] font-bold text-faint">月</span>
+          <span class="text-[10px] font-bold text-faint">火</span>
+          <span class="text-[10px] font-bold text-faint">水</span>
+          <span class="text-[10px] font-bold text-faint">木</span>
+          <span class="text-[10px] font-bold text-faint">金</span>
+          <span class="text-[10px] font-bold text-faint">土</span>
+          <span class="text-[10px] font-bold text-faint">日</span>
+        </div>
+        <div id="monthGrid" class="grid grid-cols-7 gap-y-1"></div>
+      </div>
 
       <div class="flex items-center gap-4 rounded-2xl bg-card border border-line shadow-card p-4 mb-5">
         <div class="relative shrink-0" style="width:60px;height:60px">
@@ -121,7 +151,11 @@
         <div id="intentRow" class="nowrap-scroll flex gap-5 overflow-x-auto"></div>
       </div>
 
-      <p class="text-[12px] font-bold text-sub mb-2.5 ml-0.5">きょうの予定</p>
+      <div class="flex items-center justify-between mb-2.5 ml-0.5">
+        <p id="dayListLabel" class="text-[12px] font-bold text-sub">きょうの予定</p>
+        <button class="day-add pop text-[11px] font-bold text-accent">＋ 追記</button>
+      </div>
+      <div id="dayWeight" class="mb-2.5"></div>
       <div id="planList" class="space-y-2.5"></div>
 
       <!-- nutrition goals: thin progress, no shame -->
@@ -239,6 +273,33 @@
     </button>
   </nav>
 
+  <!-- bottom sheet: declare / log workout & weight -->
+  <div id="sheetScrim" class="sheet-scrim absolute inset-0 z-40 hidden"></div>
+  <div id="sheet" class="sheet absolute inset-x-0 bottom-0 z-50 bg-card rounded-t-[24px] border-t border-line px-5 pt-3 pb-7">
+    <div class="w-10 h-1 rounded-full bg-line mx-auto mb-4"></div>
+    <div class="flex items-center justify-between mb-4">
+      <p id="sheetTitle" class="text-[16px] font-extrabold text-ink">予定を宣言</p>
+      <button id="sheetCancel" class="pop text-[12px] font-bold text-sub">閉じる</button>
+    </div>
+    <div class="flex bg-bg border border-line rounded-full p-0.5 mb-4">
+      <button class="sf-type active flex-1 text-[12px] font-bold py-2 rounded-full" data-sftype="workout">運動</button>
+      <button class="sf-type flex-1 text-[12px] font-bold py-2 rounded-full text-sub" data-sftype="weight">体重</button>
+    </div>
+    <label class="block text-[11px] font-bold text-faint mb-1.5">日付</label>
+    <input id="sfDate" type="date" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-4">
+    <div id="sfWorkout">
+      <label class="block text-[11px] font-bold text-faint mb-1.5">部位</label>
+      <div id="sfTags" class="flex flex-wrap gap-2 mb-4"></div>
+      <label class="block text-[11px] font-bold text-faint mb-1.5">時間</label>
+      <input id="sfTime" type="time" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-1">
+    </div>
+    <div id="sfWeight" class="hidden">
+      <label class="block text-[11px] font-bold text-faint mb-1.5">体重 (kg)</label>
+      <input id="sfKg" type="number" step="0.1" inputmode="decimal" placeholder="71.0" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-1">
+    </div>
+    <button id="sheetConfirm" class="pop w-full mt-3 bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">決定</button>
+  </div>
+
 </div>
 
 <script>
@@ -251,7 +312,7 @@ const members = {
 };
 const tagDot = {
   '胸トレ':'#FF6A3D','背中':'#3E86C9','脚':'#7C6CD0',
-  '肩・腕':'#E0A53A','有酸素':'#14B87C','休養':'#9AA09A'
+  '肩・腕':'#E0A53A','有酸素':'#14B87C','ストレッチ':'#5FB6A8','休養':'#9AA09A'
 };
 function avatar(m,size=40){
   return `<div style="width:${size}px;height:${size}px;background:${m.c}" class="rounded-full flex items-center justify-center text-white font-bold shrink-0"><span style="font-size:${Math.round(size*0.4)}px">${m.ini}</span></div>`;
@@ -343,17 +404,42 @@ function reactBtn(i,key,emo,n){
   return `<button class="react pop flex items-center gap-1.5 border border-line bg-card px-3 py-1.5 rounded-full text-[13px] font-bold text-sub" data-i="${i}" data-k="${key}"><span>${emo}</span><span class="cnt">${n}</span></button>`;
 }
 
-/* ---------- SCHEDULE ---------- */
+/* ---------- SCHEDULE (type-tagged log · week/month · bottom sheet) ---------- */
+const CURRENT_USER='boy';
+const TODAY='2026-06-20';
+let selectedDate=TODAY;
+let schedView='week';
+let calCursor={y:2026, m:5};            // 0-based month (5 = June)
+const WD=['月','火','水','木','金','土','日'];   // Monday-first
+
+// pure 'YYYY-MM-DD' helpers (built from parts to avoid timezone drift)
+function ymd(y,m,d){ return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+function parseYmd(s){ const [y,m,d]=s.split('-').map(Number); return {y,m:m-1,d}; }
+function wdIndex(s){ const {y,m,d}=parseYmd(s); return (new Date(y,m,d).getDay()+6)%7; } // Mon=0
+function fmtLabel(s){
+  if(s===TODAY) return 'きょうの予定';
+  const {m,d}=parseYmd(s);
+  const txt=`${m+1}月${d}日(${WD[wdIndex(s)]})`;
+  return s<TODAY ? `${txt} の記録` : `${txt} の予定`;
+}
+
+// real Monday-first week containing TODAY (2026-06-20 = Sat) → Mon 15 … Sun 21
 const week = [
-  {d:'月',n:18},{d:'火',n:19},{d:'水',n:20,today:true},{d:'木',n:21},{d:'金',n:22},{d:'土',n:23},{d:'日',n:24}
+  {d:'月',date:'2026-06-15'},{d:'火',date:'2026-06-16'},{d:'水',date:'2026-06-17'},
+  {d:'木',date:'2026-06-18'},{d:'金',date:'2026-06-19'},{d:'土',date:'2026-06-20'},{d:'日',date:'2026-06-21'}
 ];
 function renderWeek(){
-  document.getElementById('weekStrip').innerHTML = week.map(w=>`
-    <button class="day-pill pop shrink-0 w-[48px] py-3 rounded-2xl flex flex-col items-center gap-1.5 border ${w.today?'bg-ink border-ink':'bg-card border-line'}">
-      <span class="text-[11px] font-bold ${w.today?'text-white/70':'text-faint'}">${w.d}</span>
-      <span class="day-num text-[16px] font-extrabold ${w.today?'text-white':'text-ink'}">${w.n}</span>
-      <span class="w-1 h-1 rounded-full ${w.today?'bg-accent':'bg-line'}"></span>
-    </button>`).join('');
+  document.getElementById('weekStrip').innerHTML = week.map(w=>{
+    const sel=w.date===selectedDate, isToday=w.date===TODAY;
+    const {d:dd}=parseYmd(w.date);
+    const has=logEntries.some(e=>e.type==='workout'&&e.date===w.date);
+    const dotCls=(isToday||has)?'bg-accent':(sel?'bg-white/40':'bg-line');
+    return `<button class="day-pill pop shrink-0 w-[48px] py-3 rounded-2xl flex flex-col items-center gap-1.5 border ${sel?'bg-ink border-ink':'bg-card border-line'}" data-date="${w.date}">
+      <span class="text-[11px] font-bold ${sel?'text-white/70':'text-faint'}">${w.d}</span>
+      <span class="text-[16px] font-extrabold ${sel?'text-white':'text-ink'}">${dd}</span>
+      <span class="w-1 h-1 rounded-full ${dotCls}"></span>
+    </button>`;
+  }).join('');
 }
 const intents = [
   {who:'boy', tag:'背中'}, {who:'yuki', tag:'有酸素'}, {who:'taichi', tag:'胸トレ'}, {who:'mio', tag:'脚'}
@@ -370,36 +456,125 @@ function renderIntent(){
     </div>`;
   }).join('');
 }
-// Schedule items are type-tagged (CLAUDE.md「Schedule拡張仕様」). workout items live here;
-// nutrition_goal / limit / cheat_day are separate mock arrays below.
-const plans = [
-  {type:'workout', who:'taichi', tag:'胸トレ', time:'12:30', status:'done'},
-  {type:'workout', who:'yuki',   tag:'有酸素', time:'7:00',  status:'done'},
-  {type:'workout', who:'boy',    tag:'背中',  time:'19:00', status:'changed', note:'21:00→19:00'},
-  {type:'workout', who:'mio',    tag:'脚',    time:'21:00', status:'todo'},
+// Structured, export-ready log: each row is {date:'YYYY-MM-DD', type, ...value}.
+// type-tagged (CLAUDE.md「Schedule拡張仕様」). workout + weight live here; nutrition_goal /
+// limit / cheat_day stay as their own mock arrays below.
+const logEntries = [
+  {date:'2026-06-20', type:'workout', who:'taichi', tag:'胸トレ', time:'12:30', status:'done'},
+  {date:'2026-06-20', type:'workout', who:'yuki',   tag:'有酸素', time:'7:00',  status:'done'},
+  {date:'2026-06-20', type:'workout', who:'boy',    tag:'背中',  time:'19:00', status:'changed', note:'21:00→19:00'},
+  {date:'2026-06-20', type:'workout', who:'mio',    tag:'脚',    time:'21:00', status:'todo'},
+  {date:'2026-06-18', type:'workout', who:'boy', tag:'胸トレ', time:'19:30', status:'done'},
+  {date:'2026-06-16', type:'workout', who:'boy', tag:'脚',     time:'20:00', status:'done'},
+  {date:'2026-06-13', type:'workout', who:'boy', tag:'背中',   time:'18:00', status:'done'},
+  {date:'2026-06-11', type:'workout', who:'boy', tag:'肩・腕', time:'19:00', status:'done'},
+  {date:'2026-06-20', type:'weight', who:'boy', kg:71.0},
+  {date:'2026-06-18', type:'weight', who:'boy', kg:71.3},
+  {date:'2026-06-16', type:'weight', who:'boy', kg:71.6},
 ];
-function renderPlans(){
-  const stat = {
-    done:   {label:'実施済み', cls:'text-accent',    dot:'#14B87C', dim:false, check:true},
-    planned:{label:'これから', cls:'text-ink',       dot:'#E0A53A', dim:false, check:false},
-    changed:{label:'予定変更', cls:'text-[#E0A53A]', dot:'#E0A53A', dim:false, check:false},
-    todo:   {label:'未実施',   cls:'text-faint',     dot:'#D2D5CF', dim:true,  check:false},
-  };
-  document.getElementById('planList').innerHTML = plans.map(p=>{
-    const m=members[p.who]; const s=stat[p.status];
-    return `<div class="flex items-center gap-3 rounded-2xl bg-card border border-line shadow-card p-3.5 ${s.dim?'opacity-60':''}">
-      ${avatar(m,40)}
-      <div class="flex-1">
-        <div class="flex items-center gap-2">
-          <span class="text-[14px] font-extrabold text-ink">${m.name}</span>${chip(p.tag, p.status==='planned'?'':p.status)}
-        </div>
-        <p class="text-[11px] text-faint mt-1">予定 ${p.time}${p.note?` ・ <span class="font-bold text-[#E0A53A]">${p.note}</span>`:''}</p>
+const planStat = {
+  done:   {label:'実施済み', cls:'text-accent',    dot:'#14B87C', dim:false, check:true},
+  planned:{label:'これから', cls:'text-ink',       dot:'#E0A53A', dim:false, check:false},
+  changed:{label:'予定変更', cls:'text-[#E0A53A]', dot:'#E0A53A', dim:false, check:false},
+  todo:   {label:'未実施',   cls:'text-faint',     dot:'#D2D5CF', dim:true,  check:false},
+};
+function workoutCard(p){
+  const m=members[p.who]; const s=planStat[p.status]||planStat.planned;
+  return `<div class="flex items-center gap-3 rounded-2xl bg-card border border-line shadow-card p-3.5 ${s.dim?'opacity-60':''}">
+    ${avatar(m,40)}
+    <div class="flex-1">
+      <div class="flex items-center gap-2">
+        <span class="text-[14px] font-extrabold text-ink">${m.name}</span>${chip(p.tag, p.status==='planned'?'':p.status)}
       </div>
-      <span class="flex items-center gap-1.5 text-[12px] font-bold ${s.cls}">
-        <span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.check?'✓ ':''}${s.label}
-      </span>
-    </div>`;
-  }).join('');
+      <p class="text-[11px] text-faint mt-1">予定 ${p.time}${p.note?` ・ <span class="font-bold text-[#E0A53A]">${p.note}</span>`:''}</p>
+    </div>
+    <span class="flex items-center gap-1.5 text-[12px] font-bold ${s.cls}">
+      <span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.check?'✓ ':''}${s.label}
+    </span>
+  </div>`;
+}
+function renderDayList(){
+  document.getElementById('dayListLabel').textContent = fmtLabel(selectedDate);
+  const w = logEntries.find(e=>e.type==='weight'&&e.who===CURRENT_USER&&e.date===selectedDate);
+  document.getElementById('dayWeight').innerHTML = w
+    ? `<div class="flex items-center justify-between rounded-2xl bg-asoft border border-aline px-4 py-3">
+         <span class="text-[12px] font-bold text-sub">あなたの体重</span>
+         <span class="text-[15px] font-extrabold text-ink">${w.kg}<span class="text-[11px] text-faint font-bold ml-0.5">kg</span></span>
+       </div>`
+    : `<button class="weight-add pop w-full flex items-center justify-center gap-1.5 text-[12px] font-bold text-accent bg-card border border-dashed border-aline rounded-2xl py-3">＋ 体重を記録</button>`;
+  const items = logEntries.filter(e=>e.type==='workout'&&e.date===selectedDate);
+  document.getElementById('planList').innerHTML = items.length
+    ? items.map(workoutCard).join('')
+    : `<div class="text-center py-7 rounded-2xl bg-card border border-dashed border-line">
+         <p class="text-[12px] text-faint font-bold">まだ予定がありません</p>
+         <p class="text-[11px] text-faint mt-1">「＋追記」で宣言できます</p>
+       </div>`;
+}
+function renderMonth(){
+  const {y,m}=calCursor;
+  document.getElementById('monthLabel').textContent=`${y}年${m+1}月`;
+  const first=(new Date(y,m,1).getDay()+6)%7;     // Monday-first lead blanks
+  const days=new Date(y,m+1,0).getDate();
+  let cells='';
+  for(let i=0;i<first;i++) cells+='<div></div>';
+  for(let d=1;d<=days;d++){
+    const ds=ymd(y,m,d);
+    const isToday=ds===TODAY, sel=ds===selectedDate;
+    const dayWk=logEntries.filter(e=>e.type==='workout'&&e.date===ds);
+    const dots=dayWk.slice(0,3).map(e=>`<span class="w-1.5 h-1.5 rounded-full" style="background:${tagDot[e.tag]||'#9AA09A'}"></span>`).join('');
+    const more=dayWk.length>3?`<span class="text-[8px] font-bold text-faint leading-none">+${dayWk.length-3}</span>`:'';
+    const numCls = sel?'bg-accent text-white':(isToday?'text-accent ring-1 ring-accent':'text-ink');
+    cells+=`<button class="mcell pop flex flex-col items-center gap-1 py-1" data-date="${ds}">
+      <span class="w-7 h-7 flex items-center justify-center rounded-full text-[12px] font-bold ${numCls}">${d}</span>
+      <span class="flex items-center gap-0.5 h-2">${dots}${more}</span>
+    </button>`;
+  }
+  document.getElementById('monthGrid').innerHTML=cells;
+}
+
+/* ---------- bottom sheet (declare / log) ---------- */
+const SHEET_TAGS=['胸トレ','背中','脚','肩・腕','有酸素','ストレッチ','休養'];
+let sfType='workout', sfTag='背中';
+function setSheetType(t){
+  sfType=t;
+  document.querySelectorAll('.sf-type').forEach(b=>{
+    const on=b.dataset.sftype===t; b.classList.toggle('active',on); b.classList.toggle('text-sub',!on);
+  });
+  document.getElementById('sfWorkout').classList.toggle('hidden',t!=='workout');
+  document.getElementById('sfWeight').classList.toggle('hidden',t!=='weight');
+}
+function renderSheetTags(){
+  document.getElementById('sfTags').innerHTML=SHEET_TAGS.map(t=>
+    `<button class="sf-tag pop text-[11px] font-bold px-3 py-1.5 rounded-full border ${t===sfTag?'sel':'border-line text-ink bg-card'}" data-tag="${t}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style="background:${tagDot[t]||'#9AA09A'}"></span>${t}</button>`
+  ).join('');
+}
+function openSheet(type){
+  setSheetType(type||'workout');
+  document.getElementById('sfDate').value=selectedDate;
+  document.getElementById('sheetTitle').textContent = selectedDate<TODAY ? '記録を追加' : '予定を宣言';
+  renderSheetTags();
+  document.getElementById('sheetScrim').classList.remove('hidden');
+  document.getElementById('sheet').classList.add('open');
+}
+function closeSheet(){
+  document.getElementById('sheet').classList.remove('open');
+  document.getElementById('sheetScrim').classList.add('hidden');
+}
+function confirmSheet(){
+  const date=document.getElementById('sfDate').value||selectedDate;
+  if(sfType==='workout'){
+    const time=document.getElementById('sfTime').value||'—';
+    logEntries.push({date,type:'workout',who:CURRENT_USER,tag:sfTag,time,status: date<TODAY?'done':'planned'});
+  }else{
+    const kg=parseFloat(document.getElementById('sfKg').value);
+    if(!isNaN(kg)){
+      const ex=logEntries.find(e=>e.type==='weight'&&e.who===CURRENT_USER&&e.date===date);
+      if(ex) ex.kg=kg; else logEntries.push({date,type:'weight',who:CURRENT_USER,kg});
+    }
+  }
+  selectedDate=date;
+  closeSheet();
+  renderWeek(); if(schedView==='month') renderMonth(); renderDayList();
 }
 
 /* ---------- SCHEDULE: cheat day / nutrition / limits (type-tagged items) ---------- */
@@ -569,21 +744,37 @@ document.addEventListener('click',e=>{
     showPage('feed');
   }
   const day=e.target.closest('.day-pill');
-  if(day){
-    document.querySelectorAll('.day-pill').forEach(d=>{
-      d.classList.remove('bg-ink','border-ink'); d.classList.add('bg-card','border-line');
-      const num=d.querySelector('.day-num'); if(num){num.classList.remove('text-white');num.classList.add('text-ink');}
-      const wd=d.querySelector('span'); if(wd){wd.classList.remove('text-white/70');wd.classList.add('text-faint');}
-    });
-    day.classList.add('bg-ink','border-ink'); day.classList.remove('bg-card','border-line');
-    const num=day.querySelector('.day-num'); if(num){num.classList.add('text-white');num.classList.remove('text-ink');}
-    const wd=day.querySelector('span'); if(wd){wd.classList.add('text-white/70');wd.classList.remove('text-faint');}
+  if(day){ selectedDate=day.dataset.date; renderWeek(); renderDayList(); }
+
+  const vseg=e.target.closest('.vseg');
+  if(vseg){
+    schedView=vseg.dataset.vview;
+    document.querySelectorAll('.vseg').forEach(b=>{const on=b.dataset.vview===schedView;b.classList.toggle('active',on);b.classList.toggle('text-sub',!on);});
+    document.getElementById('weekStrip').classList.toggle('hidden',schedView!=='week');
+    document.getElementById('monthCal').classList.toggle('hidden',schedView!=='month');
+    if(schedView==='month') renderMonth();
   }
+  const mnav=e.target.closest('[data-mnav]');
+  if(mnav){
+    calCursor.m+=(mnav.dataset.mnav==='next'?1:-1);
+    if(calCursor.m<0){calCursor.m=11;calCursor.y--;}
+    if(calCursor.m>11){calCursor.m=0;calCursor.y++;}
+    renderMonth();
+  }
+  const mcell=e.target.closest('.mcell');
+  if(mcell){ selectedDate=mcell.dataset.date; renderMonth(); renderDayList(); }
+
+  if(e.target.closest('.declare-btn')||e.target.closest('.day-add')) openSheet('workout');
+  if(e.target.closest('.weight-add')) openSheet('weight');
+  const sft=e.target.closest('.sf-type'); if(sft) setSheetType(sft.dataset.sftype);
+  const stag=e.target.closest('.sf-tag'); if(stag){ sfTag=stag.dataset.tag; renderSheetTags(); }
+  if(e.target.closest('#sheetConfirm')) confirmSheet();
+  if(e.target.closest('#sheetCancel')||e.target.closest('#sheetScrim')) closeSheet();
 });
 
 /* ---------- init ---------- */
-renderFeedAvatars(); renderFeed(); renderWeek(); renderIntent(); renderPlans(); renderGroup();
-renderCheatDay(); renderNutrition(); renderLimits();
+renderFeedAvatars(); renderFeed(); renderWeek(); renderIntent(); renderDayList(); renderGroup();
+renderCheatDay(); renderNutrition(); renderLimits(); renderMonth();
 </script>
 </body>
 </html>
