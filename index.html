@@ -191,13 +191,18 @@
         </div>
       </div>
 
-      <!-- weight -->
+      <!-- weight + calorie balance (linked, no-shame) -->
       <div class="rounded-2xl bg-card border border-line shadow-card p-4 mb-3">
-        <div class="flex items-center justify-between mb-3">
-          <p class="text-[13px] font-extrabold text-ink">体重のうごき</p>
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-[13px] font-extrabold text-ink">体重とカロリー収支</p>
           <p id="weightDelta" class="text-[12px] font-bold text-accent">-0.8kg</p>
         </div>
-        <canvas id="weightChart" height="148"></canvas>
+        <div class="relative h-[120px]"><canvas id="weightChart"></canvas></div>
+        <div class="flex items-center gap-3 mt-2.5 mb-1 pl-1">
+          <span class="flex items-center gap-1.5 text-[10px] text-faint font-bold"><span class="w-2 h-2 rounded-sm" style="background:#14B87C"></span>不足（締まった）</span>
+          <span class="flex items-center gap-1.5 text-[10px] text-faint font-bold"><span class="w-2 h-2 rounded-sm" style="background:#C9CEC6"></span>超過</span>
+        </div>
+        <div class="relative h-[74px]"><canvas id="balanceChart"></canvas></div>
       </div>
 
       <!-- exercise days -->
@@ -206,7 +211,7 @@
           <p class="text-[13px] font-extrabold text-ink">運動日数</p>
           <p class="text-[11px] text-faint">週ごと・直近8週</p>
         </div>
-        <canvas id="daysChart" height="148"></canvas>
+        <div class="relative h-[120px]"><canvas id="daysChart"></canvas></div>
       </div>
 
       <!-- group, minimal -->
@@ -471,8 +476,8 @@ function renderGroup(){
 /* ---------- charts ---------- */
 let charts={}; let chartsReady=false;
 const weightData = {
-  week:  { labels:['月','火','水','木','金','土','日'], data:[71.8,71.6,71.7,71.3,71.1,70.9,71.0], delta:'-0.8kg' },
-  month: { labels:['7週前','6','5','4','3','2','先週','今週'], data:[73.2,72.8,72.4,72.0,71.7,71.4,71.1,71.0], delta:'-2.2kg' },
+  week:  { labels:['月','火','水','木','金','土','日'], data:[71.8,71.6,71.7,71.3,71.1,70.9,71.0], bal:[-280,-150,120,-300,-420,-80,-280], delta:'-0.8kg' },
+  month: { labels:['7週前','6','5','4','3','2','先週','今週'], data:[73.2,72.8,72.4,72.0,71.7,71.4,71.1,71.0], bal:[-1200,-1500,-900,-1700,-1400,-1000,-1600,-1400], delta:'-2.2kg' },
 };
 function initCharts(){
   if(chartsReady) return; chartsReady=true;
@@ -480,14 +485,26 @@ function initCharts(){
   Chart.defaults.color='#A2A69F';
 
   const w=weightData.week;
+  // top panel: weight line (x ticks hidden — shared with balance panel below)
   charts.weight = new Chart(document.getElementById('weightChart'), {
     type:'line',
     data:{ labels:w.labels, datasets:[{ data:w.data,
       borderColor:'#14B87C', borderWidth:2.5, tension:.4,
-      pointBackgroundColor:'#14B87C', pointRadius:3.5, pointHoverRadius:5, fill:true,
-      backgroundColor:(c)=>{const g=c.chart.ctx.createLinearGradient(0,0,0,148);g.addColorStop(0,'rgba(20,184,124,.12)');g.addColorStop(1,'rgba(20,184,124,0)');return g;} }]},
-    options:{ plugins:{legend:{display:false}}, scales:{
-      y:{grid:{color:'#F2F1ED'},border:{display:false},ticks:{stepSize:0.5,font:{size:10}}},
+      pointBackgroundColor:'#14B87C', pointRadius:3, pointHoverRadius:5, fill:true,
+      backgroundColor:(c)=>{const g=c.chart.ctx.createLinearGradient(0,0,0,120);g.addColorStop(0,'rgba(20,184,124,.12)');g.addColorStop(1,'rgba(20,184,124,0)');return g;} }]},
+    options:{ plugins:{legend:{display:false},tooltip:{enabled:false}}, scales:{
+      y:{grid:{color:'#F2F1ED'},border:{display:false},ticks:{stepSize:0.5,font:{size:10}},afterFit:(s)=>{s.width=36;}},
+      x:{grid:{display:false},border:{display:false},ticks:{display:false}} }, maintainAspectRatio:false }
+  });
+
+  // bottom panel: calorie balance bars (deficit=teal, surplus=neutral grey — no shame)
+  charts.balance = new Chart(document.getElementById('balanceChart'), {
+    type:'bar',
+    data:{ labels:w.labels, datasets:[{ data:w.bal,
+      backgroundColor:(c)=> (c.raw<=0 ? '#14B87C' : '#C9CEC6'),
+      borderRadius:4, barThickness:14 }]},
+    options:{ plugins:{legend:{display:false},tooltip:{enabled:false}}, scales:{
+      y:{grid:{color:'#F2F1ED'},border:{display:false},ticks:{display:false},afterFit:(s)=>{s.width=36;}},
       x:{grid:{display:false},border:{display:false},ticks:{font:{size:11}}} }, maintainAspectRatio:false }
   });
 
@@ -508,6 +525,11 @@ function updateWeight(mode){
   charts.weight.data.labels=d.labels;
   charts.weight.data.datasets[0].data=d.data;
   charts.weight.update();
+  if(charts.balance){
+    charts.balance.data.labels=d.labels;
+    charts.balance.data.datasets[0].data=d.bal;
+    charts.balance.update();
+  }
   document.getElementById('weightDelta').textContent=d.delta;
 }
 
