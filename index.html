@@ -105,7 +105,7 @@
         <button class="vseg text-[12px] font-bold px-4 py-1.5 rounded-full text-sub" data-vview="month">月</button>
       </div>
 
-      <div id="weekStrip" class="nowrap-scroll flex gap-2 overflow-x-auto pb-1 mb-5"></div>
+      <div id="weekStrip" class="grid grid-cols-7 gap-1.5 mb-5"></div>
 
       <!-- month calendar (toggles with week; Monday-first) -->
       <div id="monthCal" class="hidden mb-5">
@@ -142,9 +142,6 @@
         </div>
       </div>
 
-      <!-- cheat day: the star of Schedule -->
-      <div id="cheatDay" class="mb-5"></div>
-
       <div class="rounded-2xl bg-card border border-line shadow-card p-4 mb-5">
         <p class="text-[13px] font-extrabold text-ink mb-0.5">きょう、誰が何をする？</p>
         <p class="text-[11px] text-faint mb-3.5">先に宣言＝サボれない</p>
@@ -176,6 +173,8 @@
         </button>
         <p class="text-[10px] text-faint text-center mt-2">守れなくても咎めない。やめられた時だけそっと褒める</p>
       </div>
+
+      <div class="h-16"></div><!-- spacer so the fixed 運動開始 bar never covers the last card -->
     </section>
 
     <!-- ============ PROGRESS (記録) ============ -->
@@ -259,6 +258,13 @@
   </main>
 
   <!-- bottom nav -->
+  <!-- fixed start-workout CTA (schedule page only; above nav, own layer). Batch2: timer/post -->
+  <div id="startBar" class="hidden absolute bottom-[86px] inset-x-0 z-20 flex justify-center px-5 pointer-events-none">
+    <button class="start-workout pop pointer-events-auto bg-accent text-white text-[13px] font-extrabold rounded-full shadow-lift px-6 py-3 flex items-center gap-2">
+      <span class="text-[12px]">▶</span>運動開始
+    </button>
+  </div>
+
   <nav class="absolute bottom-0 inset-x-0 bg-card/96 backdrop-blur border-t border-line px-7 pt-2.5 pb-5 flex justify-around z-30">
     <button class="nav-btn flex flex-col items-center gap-1 w-20" data-page="schedule">
       <span class="nav-ico text-faint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-[23px] h-[23px]"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span>
@@ -467,7 +473,7 @@ function renderWeek(){
     const {d:dd}=parseYmd(w.date);
     const has=logEntries.some(e=>e.type==='workout'&&e.date===w.date);
     const dotCls=(isToday||has)?'bg-accent':(sel?'bg-white/40':'bg-line');
-    return `<button class="day-pill pop shrink-0 w-[48px] py-3 rounded-2xl flex flex-col items-center gap-1.5 border ${sel?'bg-ink border-ink':'bg-card border-line'}" data-date="${w.date}">
+    return `<button class="day-pill pop w-full py-3 rounded-2xl flex flex-col items-center gap-1.5 border ${sel?'bg-ink border-ink':'bg-card border-line'}" data-date="${w.date}">
       <span class="text-[11px] font-bold ${sel?'text-white/70':'text-faint'}">${w.d}</span>
       <span class="text-[16px] font-extrabold ${sel?'text-white':'text-ink'}">${dd}</span>
       <span class="w-1 h-1 rounded-full ${dotCls}"></span>
@@ -610,26 +616,7 @@ function confirmSheet(){
   renderWeek(); if(schedView==='month') renderMonth(); renderDayList();
 }
 
-/* ---------- SCHEDULE: cheat day / nutrition / limits (type-tagged items) ---------- */
-const cheatDay = { type:'cheat_day', emoji:'🍜', title:'土曜はチートデイ', sub:'あと2日 ・ ラーメン解禁！我慢の先のご褒美', who:['boy','yuki','taichi','mio'] };
-function renderCheatDay(){
-  document.getElementById('cheatDay').innerHTML = `
-  <div class="rounded-2xl border border-aline bg-asoft p-4">
-    <div class="flex items-center gap-3">
-      <div class="w-12 h-12 rounded-2xl bg-card border border-aline flex items-center justify-center text-[26px] shrink-0">${cheatDay.emoji}</div>
-      <div class="flex-1 min-w-0">
-        <span class="text-[10px] font-extrabold text-accent bg-card border border-aline px-2 py-0.5 rounded-full">みんなで解禁</span>
-        <p class="text-[15px] font-extrabold text-ink mt-1.5 leading-tight">${cheatDay.title} 🎉</p>
-        <p class="text-[11px] text-sub mt-1">${cheatDay.sub}</p>
-      </div>
-    </div>
-    <div class="flex items-center gap-2 mt-3 pt-3 border-t border-aline">
-      <div class="flex -space-x-2">${cheatDay.who.map(k=>`<div class="ring-2 ring-asoft rounded-full">${avatar(members[k],24)}</div>`).join('')}</div>
-      <span class="text-[11px] font-bold text-sub">${cheatDay.who.length}人が参加</span>
-    </div>
-  </div>`;
-}
-
+/* ---------- SCHEDULE: nutrition / limits (type-tagged items) ---------- */
 const nutritionGoals = [
   {type:'nutrition_goal', label:'2000kcal以内の日', done:3, total:5},
   {type:'nutrition_goal', label:'タンパク質120g達成', done:4, total:7},
@@ -802,6 +789,7 @@ function showPage(id){
   document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===id));
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===id));
   document.querySelector('main').scrollTop=0;
+  document.getElementById('startBar').classList.toggle('hidden', id!=='schedule');
   if(id==='progress') setTimeout(initCharts,60);
 }
 document.querySelectorAll('.nav-btn').forEach(b=> b.addEventListener('click',()=>showPage(b.dataset.page)));
@@ -869,7 +857,7 @@ document.addEventListener('input', e=>{ if(e.target.closest('#profileSheet')) up
 
 /* ---------- init ---------- */
 renderFeedAvatars(); renderFeed(); renderWeek(); renderIntent(); renderDayList(); renderGroup();
-renderCheatDay(); renderNutrition(); renderLimits(); renderMonth(); renderMaintCaption();
+renderNutrition(); renderLimits(); renderMonth(); renderMaintCaption();
 </script>
 </body>
 </html>
