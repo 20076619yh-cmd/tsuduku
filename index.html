@@ -79,8 +79,8 @@
 
   <main class="phone-scroll flex-1 overflow-y-auto px-5 pb-28">
 
-    <!-- ============ FEED (default) ============ -->
-    <section id="feed" class="page active">
+    <!-- ============ FEED ============ -->
+    <section id="feed" class="page">
       <div class="flex items-end justify-between mt-3 mb-4">
         <h2 class="text-[24px] font-extrabold text-ink tracking-tight">タイムライン</h2>
         <div class="flex items-center gap-2 text-sub">
@@ -92,8 +92,8 @@
       <p class="text-center text-[12px] text-faint mt-7 mb-2">これより前の投稿はありません</p>
     </section>
 
-    <!-- ============ SCHEDULE ============ -->
-    <section id="schedule" class="page">
+    <!-- ============ SCHEDULE (default) ============ -->
+    <section id="schedule" class="page active">
       <div class="flex items-end justify-between mt-3 mb-4">
         <h2 class="text-[24px] font-extrabold text-ink tracking-tight">予定</h2>
         <button class="declare-btn pop text-[12px] font-bold text-white bg-accent px-3.5 py-2 rounded-full">＋ 宣言する</button>
@@ -267,11 +267,11 @@
   </div>
 
   <nav class="absolute bottom-0 inset-x-0 bg-card/96 backdrop-blur border-t border-line px-7 pt-2.5 pb-5 flex justify-around z-30">
-    <button class="nav-btn flex flex-col items-center gap-1 w-20" data-page="schedule">
+    <button class="nav-btn active flex flex-col items-center gap-1 w-20" data-page="schedule">
       <span class="nav-ico text-faint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-[23px] h-[23px]"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span>
       <span class="nav-lbl text-[11px] font-bold text-faint">予定</span>
     </button>
-    <button class="nav-btn active flex flex-col items-center gap-1 w-20" data-page="feed">
+    <button class="nav-btn flex flex-col items-center gap-1 w-20" data-page="feed">
       <span class="nav-ico text-faint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-[23px] h-[23px]"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></span>
       <span class="nav-lbl text-[11px] font-bold text-faint">タイムライン</span>
     </button>
@@ -405,9 +405,17 @@ const posts = [
     text:'朝ラン5km完了。今日は脚が軽い', r:{fire:5,muscle:2,clap:3} },
   { who:'taichi', time:'12:40', tags:['胸トレ','肩・腕'], cal:'+150', calNeg:false, dur:'65分', burn:'320', intake:'2,300', ph:'linear-gradient(135deg,#F1EFEC,#ECE9E4)', phIco:'🏋️',
     text:'昼ジム。ベンチ自己ベスト更新。昼は鶏むね', r:{fire:8,muscle:6,clap:2} },
-  { who:'boy', time:'19:05', tags:['背中'], cal:'-420', calNeg:true, dur:'58分', burn:'420', intake:'1,900', ph:'linear-gradient(135deg,#EDEFF2,#E7EBEF)', phIco:'💪',
+  { who:'boy', time:'19:05', tags:['背中'], dur:'58分', ph:'linear-gradient(135deg,#EDEFF2,#E7EBEF)', phIco:'💪',
     text:'背中の日。懸垂やっと10回いけた', r:{fire:3,muscle:9,clap:4} },
 ];
+// every post carries who + scope (公開範囲) for future export/share; ids for reference
+let postSeq=0;
+posts.forEach(p=>{ p.id='p'+(postSeq++); if(!p.scope) p.scope='group'; });
+// single source of truth for creating timeline posts (timer-stop / resist / future done-share all use this)
+function createPost({kind='workout', who=CURRENT_USER, tags=[], dur=null, photo=null, text='', ruleLabel=null, scope='group'}){
+  return { id:'p'+(postSeq++), kind, who, scope, time:'いま', tags:(tags||[]).slice(), dur, photo, text, ruleLabel, r:{fire:0,muscle:0,clap:0} };
+}
+function addPost(p){ posts.unshift(p); renderFeed(); }
 function renderFeedAvatars(){
   document.getElementById('feedAvatars').innerHTML =
     ['taichi','yuki','boy'].map(k=>`<div class="ring-2 ring-bg rounded-full">${avatar(members[k],24)}</div>`).join('');
@@ -427,15 +435,19 @@ function renderFeed(){
       </div>
       <div class="px-4 pt-3 pb-1">
         <p class="text-[14px] text-ink leading-snug">${p.text}</p>
-        <div class="mt-2.5 flex items-center gap-1.5 text-[12px] font-bold text-accent">
-          <span class="w-1.5 h-1.5 rounded-full bg-accent"></span>自分ルール「${p.ruleLabel}」を守った
-        </div>
+        ${p.ruleLabel?`<div class="mt-2.5 flex items-center gap-1.5 text-[12px] font-bold text-accent"><span class="w-1.5 h-1.5 rounded-full bg-accent"></span>自分ルール「${p.ruleLabel}」を守った</div>`:''}
       </div>
       <div class="flex gap-2 px-4 py-3">
         ${reactBtn(i,'fire','🔥',p.r.fire)}${reactBtn(i,'muscle','💪',p.r.muscle)}${reactBtn(i,'clap','👏',p.r.clap)}
       </div>
     </article>`;
-    const calColor = p.calNeg ? '#14B87C' : '#6E736C';
+    // post = 実施部位 + 実施時間 + 写真 + コメント (no calories — those live on 記録)
+    const imgBlock = p.photo
+      ? `<div class="px-4 pt-3"><img src="${p.photo}" class="rounded-xl w-full h-44 object-cover"></div>`
+      : (p.ph ? `<div class="px-4 pt-3"><div class="rounded-xl h-44 flex items-center justify-center" style="background:${p.ph}"><span style="font-size:42px;opacity:.32">${p.phIco}</span></div></div>` : '');
+    const textLine = p.text ? `<p class="text-[14px] text-ink leading-snug">${p.text}</p>` : '';
+    const durLine = p.dur ? `<div class="${p.text?'mt-2.5 ':''}flex items-center gap-1.5 text-[12px] font-bold text-sub"><span class="w-1.5 h-1.5 rounded-full bg-accent"></span>実施 ${p.dur}</div>` : '';
+    const body = (textLine||durLine) ? `<div class="px-4 pt-3 pb-1">${textLine}${durLine}</div>` : '';
     return `
     <article class="rounded-2xl bg-card border border-line shadow-card overflow-hidden">
       <div class="flex items-center gap-3 px-4 pt-3.5">
@@ -444,21 +456,10 @@ function renderFeed(){
           <p class="text-[14px] font-extrabold text-ink leading-none">${m.name}</p>
           <p class="text-[11px] text-faint mt-1">きょう ${p.time}</p>
         </div>
-        <div class="flex gap-1.5">${p.tags.map(t=>chip(t)).join('')}</div>
+        <div class="flex flex-wrap justify-end gap-1.5">${(p.tags||[]).map(t=>chip(t)).join('')}</div>
       </div>
-      <div class="px-4 pt-3">
-        <div class="rounded-xl h-44 flex items-center justify-center" style="background:${p.ph}">
-          <span style="font-size:42px;opacity:.32">${p.phIco}</span>
-        </div>
-      </div>
-      <div class="px-4 pt-3 pb-1">
-        <p class="text-[14px] text-ink leading-snug">${p.text}</p>
-        <div class="mt-3 grid grid-cols-3 rounded-xl bg-bg border border-line divide-x divide-line overflow-hidden">
-          ${hudCell('実施', p.dur, '#181D1A')}
-          ${hudCell('摂取', p.intake, '#181D1A')}
-          ${hudCell('メンテ', p.cal, calColor)}
-        </div>
-      </div>
+      ${imgBlock}
+      ${body}
       <div class="flex gap-2 px-4 py-3">
         ${reactBtn(i,'fire','🔥',p.r.fire)}
         ${reactBtn(i,'muscle','💪',p.r.muscle)}
@@ -974,7 +975,12 @@ document.addEventListener('click',e=>{
   if(e.target.closest('.rule-add')) openRule();
   if(e.target.closest('#ruleSave')) saveRule();
   if(e.target.closest('#ruleCancel')||e.target.closest('#ruleScrim')) closeRule();
-  if(e.target.closest('.resist-add')) recordResist();
+  if(e.target.closest('.resist-add')){
+    recordResist();
+    const rule = limits[0] ? limits[0].label : null;
+    addPost(createPost({kind:'resist', who:CURRENT_USER, ruleLabel:rule, text:'今日は誘惑に勝った。踏みとどまった自分をほめる', scope:'group'}));
+    showPage('feed');
+  }
   const day=e.target.closest('.day-pill');
   if(day){ selectedDate=day.dataset.date; renderWeek(); renderDayList(); }
 
@@ -1014,6 +1020,7 @@ document.addEventListener('input', e=>{ if(e.target.closest('#profileSheet')) up
 /* ---------- init ---------- */
 renderFeedAvatars(); renderFeed(); renderWeek(); renderDayList(); renderGroup();
 renderMeal(); renderLimits(); renderMonth(); renderMaintCaption();
+showPage('schedule');   // app opens on 予定 (also reveals the 運動開始 bar)
 </script>
 </body>
 </html>
