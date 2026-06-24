@@ -713,9 +713,9 @@ function initCharts(){
       backgroundColor:(c)=> (c.raw<=0 ? '#14B87C' : '#C9CEC6'),
       borderRadius:4, barThickness:14 }]},
     options:{ plugins:{legend:{display:false},tooltip:{enabled:false}}, scales:{
-      y:{ min:-1100, max:300,
-          grid:{ color:(ctx)=> ctx.tick.value===0 ? '#CDCFC9' : '#EDECE8' }, border:{display:false},
-          ticks:{ stepSize:250, font:{size:9}, color:'#A2A69F', callback:(v)=> v<0 ? (v===-1000?'1k':String(-v)) : '' },
+      y:{ min:-600, max:600,
+          grid:{ color:(ctx)=> ctx.tick.value>0 ? 'rgba(0,0,0,0)' : (ctx.tick.value===0 ? '#CDCFC9' : '#EDECE8') }, border:{display:false},
+          ticks:{ stepSize:250, font:{size:9}, color:'#A2A69F', callback:(v)=> v<0 ? String(-v) : '' },
           afterFit:(s)=>{s.width=36;} },
       x:{grid:{display:false},border:{display:false},ticks:{font:{size:11}}} }, maintainAspectRatio:false }
   });
