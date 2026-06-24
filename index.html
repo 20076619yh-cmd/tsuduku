@@ -72,7 +72,7 @@
         <button class="pop w-8 h-8 rounded-full flex items-center justify-center text-sub">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-[18px] h-[18px]"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>
         </button>
-        <div class="w-8 h-8 rounded-full flex items-center justify-center text-white text-[13px] font-bold" style="background:#14B87C">ボ</div>
+        <button id="profileBtn" class="profile-btn pop w-8 h-8 rounded-full flex items-center justify-center text-white text-[13px] font-bold" style="background:#14B87C">ボ</button>
       </div>
     </div>
   </header>
@@ -237,6 +237,7 @@
           <span class="flex items-center gap-1.5 text-[10px] text-faint font-bold"><span class="w-2 h-2 rounded-sm" style="background:#C9CEC6"></span>超過</span>
         </div>
         <div class="relative h-[74px]"><canvas id="balanceChart"></canvas></div>
+        <p id="maintCaption" class="text-[10px] text-faint mt-2 pl-1"></p>
       </div>
 
       <!-- exercise days -->
@@ -298,6 +299,38 @@
       <input id="sfKg" type="number" step="0.1" inputmode="decimal" placeholder="71.0" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-1">
     </div>
     <button id="sheetConfirm" class="pop w-full mt-3 bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">決定</button>
+  </div>
+
+  <!-- profile sheet (mock, no auth) -->
+  <div id="profileScrim" class="sheet-scrim absolute inset-0 z-40 hidden"></div>
+  <div id="profileSheet" class="sheet absolute inset-x-0 bottom-0 z-50 bg-card rounded-t-[24px] border-t border-line px-5 pt-3 pb-7">
+    <div class="w-10 h-1 rounded-full bg-line mx-auto mb-4"></div>
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-[16px] font-extrabold text-ink">プロフィール</p>
+      <button id="profileCancel" class="pop text-[12px] font-bold text-sub">閉じる</button>
+    </div>
+    <label class="block text-[11px] font-bold text-faint mb-1.5">ニックネーム</label>
+    <input id="pfNick" type="text" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-4">
+    <div class="grid grid-cols-3 gap-2 mb-4">
+      <div><label class="block text-[11px] font-bold text-faint mb-1.5">身長(cm)</label><input id="pfHeight" type="number" inputmode="decimal" class="w-full bg-bg border border-line rounded-xl px-2.5 py-2.5 text-[14px] font-bold text-ink"></div>
+      <div><label class="block text-[11px] font-bold text-faint mb-1.5">体重(kg)</label><input id="pfWeight" type="number" step="0.1" inputmode="decimal" class="w-full bg-bg border border-line rounded-xl px-2.5 py-2.5 text-[14px] font-bold text-ink"></div>
+      <div><label class="block text-[11px] font-bold text-faint mb-1.5">体脂肪(%)</label><input id="pfFat" type="number" step="0.1" inputmode="decimal" class="w-full bg-bg border border-line rounded-xl px-2.5 py-2.5 text-[14px] font-bold text-ink"></div>
+    </div>
+    <div class="rounded-2xl bg-asoft border border-aline p-4 mb-3">
+      <div class="flex items-end justify-between">
+        <div>
+          <p class="text-[11px] font-bold text-sub">メンテナンスカロリー</p>
+          <p class="text-[10px] text-faint mt-0.5">Katch-McArdle ・ 初期の目安</p>
+        </div>
+        <p class="text-[20px] font-extrabold text-ink leading-none"><span id="pfMaint">—</span><span class="text-[11px] text-faint font-bold ml-0.5">kcal</span></p>
+      </div>
+      <div class="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-aline">
+        <div><label class="block text-[10px] font-bold text-faint mb-1">活動係数</label><input id="pfAct" type="number" step="0.05" inputmode="decimal" class="w-full bg-card border border-line rounded-lg px-2.5 py-2 text-[13px] font-bold text-ink"></div>
+        <div><label class="block text-[10px] font-bold text-faint mb-1">手動上書き(任意)</label><input id="pfOverride" type="number" inputmode="numeric" placeholder="自動" class="w-full bg-card border border-line rounded-lg px-2.5 py-2 text-[13px] font-bold text-ink"></div>
+      </div>
+    </div>
+    <p class="text-[10px] text-faint mb-3 leading-relaxed">※式は個人で±200〜400kcalずれ得る初期の目安。将来は体重×カロリー実データで補正予定。認証・保存は別フェーズ。</p>
+    <button id="profileSave" class="pop w-full bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">保存</button>
   </div>
 
 </div>
@@ -652,7 +685,8 @@ function renderGroup(){
 let charts={}; let chartsReady=false;
 const weightData = {
   week:  { labels:['月','火','水','木','金','土','日'], data:[71.8,71.6,71.7,71.3,71.1,70.9,71.0], bal:[-280,-150,120,-300,-420,-80,-280], delta:'-0.8kg' },
-  month: { labels:['7週前','6','5','4','3','2','先週','今週'], data:[73.2,72.8,72.4,72.0,71.7,71.4,71.1,71.0], bal:[-1200,-1500,-900,-1700,-1400,-1000,-1600,-1400], delta:'-2.2kg' },
+  // month bal = 1日あたり平均の収支（週合計ではなく正規化。週ビューと同尺度でグリッドが効く）
+  month: { labels:['7週前','6','5','4','3','2','先週','今週'], data:[73.2,72.8,72.4,72.0,71.7,71.4,71.1,71.0], bal:[-170,-210,-130,-240,-200,-140,-230,-200], delta:'-2.2kg' },
 };
 function initCharts(){
   if(chartsReady) return; chartsReady=true;
@@ -679,7 +713,10 @@ function initCharts(){
       backgroundColor:(c)=> (c.raw<=0 ? '#14B87C' : '#C9CEC6'),
       borderRadius:4, barThickness:14 }]},
     options:{ plugins:{legend:{display:false},tooltip:{enabled:false}}, scales:{
-      y:{grid:{color:'#F2F1ED'},border:{display:false},ticks:{display:false},afterFit:(s)=>{s.width=36;}},
+      y:{ min:-1100, max:300,
+          grid:{ color:(ctx)=> ctx.tick.value===0 ? '#CDCFC9' : '#EDECE8' }, border:{display:false},
+          ticks:{ stepSize:250, font:{size:9}, color:'#A2A69F', callback:(v)=> v<0 ? (v===-1000?'1k':String(-v)) : '' },
+          afterFit:(s)=>{s.width=36;} },
       x:{grid:{display:false},border:{display:false},ticks:{font:{size:11}}} }, maintainAspectRatio:false }
   });
 
@@ -706,6 +743,58 @@ function updateWeight(mode){
     charts.balance.update();
   }
   document.getElementById('weightDelta').textContent=d.delta;
+}
+
+/* ---------- profile + maintenance (Katch-McArdle, mock — no auth/persistence) ---------- */
+const profile = { nick:'ぼーい', height:175, weight:71.0, bodyfat:18, activity:1.45, maintenanceOverride:null };
+// LBM=体重×(1-体脂肪/100), BMR=370+21.6×LBM, メンテ=BMR×活動係数。これは「初期の目安」
+// （式は個人で±200〜400kcalずれ得る）。将来は体重×カロリー実データで補正(学習)する構造を見据える（今回は未実装、初期値＋手動補正のみ）。
+function computeMaintenance(p){
+  const lbm = p.weight * (1 - p.bodyfat/100);
+  const bmr = 370 + 21.6 * lbm;
+  return Math.round(bmr * p.activity);
+}
+function maintenanceValue(){ return profile.maintenanceOverride!=null ? profile.maintenanceOverride : computeMaintenance(profile); }
+function renderMaintCaption(){
+  const el=document.getElementById('maintCaption'); if(!el) return;
+  const note=profile.maintenanceOverride!=null ? '手動補正' : '初期の目安';
+  el.textContent=`0ライン＝メンテ ${maintenanceValue().toLocaleString()}kcal（${note}）`;
+}
+function readProfileForm(){
+  const ov=parseFloat(document.getElementById('pfOverride').value);
+  return {
+    nick:(document.getElementById('pfNick').value||'').trim()||profile.nick,
+    height:parseFloat(document.getElementById('pfHeight').value)||profile.height,
+    weight:parseFloat(document.getElementById('pfWeight').value)||profile.weight,
+    bodyfat:parseFloat(document.getElementById('pfFat').value)||profile.bodyfat,
+    activity:parseFloat(document.getElementById('pfAct').value)||profile.activity,
+    maintenanceOverride: isNaN(ov)?null:ov,
+  };
+}
+function updateProfilePreview(){
+  const f=readProfileForm();
+  const v=f.maintenanceOverride!=null ? f.maintenanceOverride : computeMaintenance(f);
+  document.getElementById('pfMaint').textContent=Math.round(v).toLocaleString();
+}
+function openProfile(){
+  document.getElementById('pfNick').value=profile.nick;
+  document.getElementById('pfHeight').value=profile.height;
+  document.getElementById('pfWeight').value=profile.weight;
+  document.getElementById('pfFat').value=profile.bodyfat;
+  document.getElementById('pfAct').value=profile.activity;
+  document.getElementById('pfOverride').value=profile.maintenanceOverride??'';
+  updateProfilePreview();
+  document.getElementById('profileScrim').classList.remove('hidden');
+  document.getElementById('profileSheet').classList.add('open');
+}
+function closeProfile(){
+  document.getElementById('profileSheet').classList.remove('open');
+  document.getElementById('profileScrim').classList.add('hidden');
+}
+function saveProfile(){
+  Object.assign(profile, readProfileForm());
+  closeProfile();
+  renderMaintCaption();
 }
 
 /* ---------- nav + interactions ---------- */
@@ -770,11 +859,17 @@ document.addEventListener('click',e=>{
   const stag=e.target.closest('.sf-tag'); if(stag){ sfTag=stag.dataset.tag; renderSheetTags(); }
   if(e.target.closest('#sheetConfirm')) confirmSheet();
   if(e.target.closest('#sheetCancel')||e.target.closest('#sheetScrim')) closeSheet();
+
+  if(e.target.closest('#profileBtn')) openProfile();
+  if(e.target.closest('#profileSave')) saveProfile();
+  if(e.target.closest('#profileCancel')||e.target.closest('#profileScrim')) closeProfile();
 });
+// live maintenance preview while editing the profile sheet
+document.addEventListener('input', e=>{ if(e.target.closest('#profileSheet')) updateProfilePreview(); });
 
 /* ---------- init ---------- */
 renderFeedAvatars(); renderFeed(); renderWeek(); renderIntent(); renderDayList(); renderGroup();
-renderCheatDay(); renderNutrition(); renderLimits(); renderMonth();
+renderCheatDay(); renderNutrition(); renderLimits(); renderMonth(); renderMaintCaption();
 </script>
 </body>
 </html>
