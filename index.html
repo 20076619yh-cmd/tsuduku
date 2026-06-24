@@ -151,10 +151,10 @@
       <div class="rounded-2xl bg-card border border-line shadow-card p-4 mt-5">
         <div class="flex items-center justify-between mb-3">
           <p class="text-[13px] font-extrabold text-ink">今週の自分ルール</p>
-          <button class="rule-add pop text-[11px] font-bold text-accent">＋ ルール追加</button>
+          <button id="ruleAddBtn" class="rule-add pop text-[11px] font-bold text-accent">＋ ルール追加</button>
         </div>
-        <div id="limitList" class="flex flex-wrap gap-2"></div>
-        <p class="text-[10px] text-faint mt-2">タグをタップ→公開範囲を切替 ・ ✕ で削除</p>
+        <div id="limitList" class="space-y-2"></div>
+        <p class="text-[10px] text-faint mt-2">「達成」で肯定報告（公開時はタイムラインへ）・ 🌐/🔒 で公開範囲 ・ ✕ で削除 ・ 最大3つ</p>
 
         <div class="flex items-center justify-between mt-4 pt-3.5 border-t border-line">
           <span class="flex items-center gap-1.5 text-[12px] font-extrabold text-ink">🔥 有言実行 <span class="text-accent" id="streakCount">6</span> 連続</span>
@@ -163,7 +163,7 @@
         <button class="resist-add pop w-full mt-3 flex items-center justify-center gap-2 text-[13px] font-extrabold text-accent bg-asoft border border-aline rounded-2xl py-3">
           <span class="text-[15px]">🛡</span>「踏みとどまった」を記録
         </button>
-        <p class="text-[10px] text-faint text-center mt-2">守れなくても咎めない。やめられた時だけそっと褒める（タイムライン投稿はバッチ2）</p>
+        <p class="text-[10px] text-faint text-center mt-2">守れなくても咎めない。できた時だけそっと褒める</p>
       </div>
 
       <div class="h-16"></div><!-- spacer so the fixed 運動開始 bar never covers the last card -->
@@ -551,6 +551,24 @@ function renderFeed(){
         ${reactBtn(i,'fire','🔥',p.r.fire)}${reactBtn(i,'muscle','💪',p.r.muscle)}${reactBtn(i,'clap','👏',p.r.clap)}
       </div>
     </article>`;
+    if(p.kind==='achieve') return `
+    <article class="rounded-2xl bg-asoft border border-aline shadow-card overflow-hidden">
+      <div class="flex items-center gap-3 px-4 pt-3.5">
+        ${avatar(m,38)}
+        <div class="flex-1">
+          <p class="text-[14px] font-extrabold text-ink leading-none">${m.name}</p>
+          <p class="text-[11px] text-faint mt-1">きょう ${p.time}</p>
+        </div>
+        <span class="inline-flex items-center gap-1 text-[11px] font-bold text-accent bg-card border border-aline px-2.5 py-1 rounded-full">🎯 ルール達成</span>
+      </div>
+      <div class="px-4 pt-3 pb-1">
+        <p class="text-[14px] text-ink leading-snug">${p.text}</p>
+        ${p.ruleLabel?`<div class="mt-2.5 flex items-center gap-1.5 text-[12px] font-bold text-accent"><span class="w-1.5 h-1.5 rounded-full bg-accent"></span>自分ルール「${p.ruleLabel}」を達成</div>`:''}
+      </div>
+      <div class="flex gap-2 px-4 py-3">
+        ${reactBtn(i,'fire','🔥',p.r.fire)}${reactBtn(i,'muscle','💪',p.r.muscle)}${reactBtn(i,'clap','👏',p.r.clap)}
+      </div>
+    </article>`;
     // post = 実施部位 + 実施時間 + 写真 + コメント (no calories — those live on 記録)
     const imgBlock = p.photo
       ? `<div class="px-4 pt-3"><img src="${p.photo}" class="rounded-xl w-full h-44 object-cover"></div>`
@@ -862,29 +880,44 @@ function renderDayWeight(){
     : `<button class="weight-add pop w-full flex items-center justify-center gap-1.5 text-[12px] font-bold text-accent bg-card border border-dashed border-aline rounded-2xl py-2.5">⚖ ＋ ${lbl}を記録</button>`;
 }
 
-// per-item privacy scopes (no-shame: private is just grey, never a warning)
-const scopes=[
-  {k:'all',label:'全員',ico:'🌐'},{k:'group',label:'グループ',ico:'👥'},
-  {k:'some',label:'特定の人',ico:'＠'},{k:'self',label:'自分だけ',ico:'🔒'},
-];
+// self-rules: each picks 公開(みんなが見れる) or 自分だけ(非公開). No 4-step scope, no warnings. Max 3.
 const limits = [
-  {type:'limit', emoji:'🍺', label:'飲みは週2まで', done:1, total:2, scope:1},
-  {type:'limit', emoji:'🍜', label:'ラーメン我慢', done:0, total:0, scope:3},
+  {type:'limit', emoji:'🍺', label:'飲みは週2まで', done:1, total:2, pub:true},
+  {type:'limit', emoji:'🍜', label:'ラーメン我慢', done:0, total:0, pub:false},
 ];
 function renderLimits(){
-  document.getElementById('limitList').innerHTML = limits.map((l,i)=>{
-    const sc=scopes[l.scope]; const pub=l.scope!==3;
-    const count = l.total ? `<span class="text-[10px] font-extrabold ${pub?'text-accent':'text-sub'}">${l.done}/${l.total}</span>` : '';
-    return `<div class="limit pop inline-flex items-center gap-2 text-[12px] font-bold px-3 py-2 rounded-2xl border ${pub?'bg-asoft border-aline text-ink':'bg-card border-line text-sub'}" data-i="${i}">
-      <span class="cursor-pointer">${l.emoji} ${l.label}</span>${count}
-      <span class="flex items-center gap-1 text-[10px] ${pub?'text-accent':'text-faint'}">${sc.ico}${sc.label}</span>
-      <span class="limit-del cursor-pointer text-faint text-[12px] leading-none pl-0.5">✕</span>
+  const list=document.getElementById('limitList');
+  if(!list) return;
+  list.innerHTML = limits.length ? limits.map((l,i)=>{
+    const count = l.total ? `<span class="text-[10px] font-bold text-faint ml-2">今週 ${l.done}/${l.total}</span>` : '';
+    return `<div class="limit flex items-center gap-2 rounded-2xl border bg-card border-line px-3 py-2.5" data-i="${i}">
+      <span class="text-[15px] shrink-0">${l.emoji}</span>
+      <div class="flex-1 min-w-0"><p class="text-[13px] font-bold text-ink truncate">${l.label}${count}</p></div>
+      <button class="rule-pub pop flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border shrink-0 ${l.pub?'bg-asoft border-aline text-accent':'bg-card border-line text-faint'}">${l.pub?'🌐 公開':'🔒 自分だけ'}</button>
+      <button class="rule-done pop text-[11px] font-extrabold text-white bg-accent px-2.5 py-1.5 rounded-full shrink-0">達成</button>
+      <button class="rule-del pop text-faint text-[13px] leading-none shrink-0 pl-0.5">✕</button>
     </div>`;
-  }).join('');
+  }).join('') : `<p class="text-[12px] text-faint text-center py-3">まだ自分ルールはありません。「＋ルール追加」でそっと決められます</p>`;
+  const addBtn=document.getElementById('ruleAddBtn');
+  if(addBtn) addBtn.classList.toggle('hidden', limits.length>=3);
+}
+// no-shame: 達成した時だけ祝う(公開ならタイムラインへ)。未達は何も晒さない・通知しない・×を残さない。
+function recordRuleAchieve(i){
+  const l=limits[i]; if(!l) return;
+  if(l.total) l.done=Math.min((l.done||0)+1, l.total);
+  streak++;
+  renderStreak(); renderLimits();
+  if(typeof renderProgressHero==='function') renderProgressHero();
+  if(l.pub){
+    addPost(createPost({kind:'achieve', who:CURRENT_USER, ruleLabel:l.label, text:`自分ルール「${l.label}」を達成。続いてる自分をほめる`, scope:'all'}));
+    showPage('feed');
+  }
 }
 
 /* ---------- self-rule add + resist record (record-only; timeline post = batch2) ---------- */
 let resistWeek=0;
+let streak=6;   // 🔥有言実行の連続。自分ルール達成/継続で育つ（F項目はここに吸収）
+function renderStreak(){ const el=document.getElementById('streakCount'); if(el) el.textContent=streak; }
 function recordResist(){
   resistWeek++;
   const el=document.getElementById('resistCount');
@@ -903,8 +936,9 @@ function closeRule(){
 function saveRule(){
   const label=(document.getElementById('rfLabel').value||'').trim();
   if(!label){ closeRule(); return; }
+  if(limits.length>=3){ closeRule(); return; }   // 最大3つ（静かに止めるだけ・警告は出さない）
   const total=parseInt(document.getElementById('rfTotal').value)||0;
-  limits.push({type:'limit', emoji:'🎯', label, done:0, total, scope:1});
+  limits.push({type:'limit', emoji:'🎯', label, done:0, total, pub:true});
   closeRule(); renderLimits();
 }
 
@@ -1072,14 +1106,12 @@ document.addEventListener('click',e=>{
     chartMode=seg.dataset.seg;
     updateWeight(seg.dataset.seg);
   }
-  const ldel=e.target.closest('.limit-del');
-  if(ldel){ const li=ldel.closest('.limit'); if(li){ limits.splice(+li.dataset.i,1); renderLimits(); } }
-  const lim=e.target.closest('.limit');
-  if(lim && !ldel){
-    const i=+lim.dataset.i;
-    limits[i].scope=(limits[i].scope+1)%scopes.length;
-    renderLimits();
-  }
+  const rdel=e.target.closest('.rule-del');
+  if(rdel){ const li=rdel.closest('.limit'); if(li){ limits.splice(+li.dataset.i,1); renderLimits(); } }
+  const rpub=e.target.closest('.rule-pub');
+  if(rpub){ const li=rpub.closest('.limit'); if(li){ limits[+li.dataset.i].pub=!limits[+li.dataset.i].pub; renderLimits(); } }
+  const rdone=e.target.closest('.rule-done');
+  if(rdone){ const li=rdone.closest('.limit'); if(li) recordRuleAchieve(+li.dataset.i); }
   if(e.target.closest('.meal-add')) openSheet('meal');
   const eedit=e.target.closest('.entry-edit'); if(eedit) openSheetEdit(eedit.dataset.id);
   if(e.target.closest('#sheetDelete')) deleteEntry();
@@ -1139,7 +1171,7 @@ document.addEventListener('change', e=>{ if(e.target.id==='psPhoto') handlePhoto
 
 /* ---------- init ---------- */
 renderFeedAvatars(); renderFeed(); renderWeek(); renderDayList(); renderGroup();
-renderMeal(); renderLimits(); renderMonth(); renderMaintCaption(); renderStartBar(); renderStats();
+renderMeal(); renderLimits(); renderMonth(); renderMaintCaption(); renderStartBar(); renderStats(); renderStreak();
 showPage('schedule');   // app opens on 予定 (also reveals the 運動開始 bar)
 </script>
 </body>
