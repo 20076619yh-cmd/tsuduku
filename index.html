@@ -145,9 +145,9 @@
       </div>
 
       <div class="rounded-2xl bg-card border border-line shadow-card p-4 mb-5">
-        <p class="text-[13px] font-extrabold text-ink mb-0.5">きょう、誰が何をする？</p>
-        <p class="text-[11px] text-faint mb-3.5">先に宣言＝サボれない</p>
-        <div id="intentRow" class="nowrap-scroll flex gap-5 overflow-x-auto"></div>
+        <p class="text-[13px] font-extrabold text-ink mb-0.5">今日、誰が何をする</p>
+        <p class="text-[11px] text-faint mb-3">先に宣言＝サボれない ・ 体重は本人が許可した前週比のみ</p>
+        <div id="todayList" class="space-y-3 max-h-[220px] overflow-y-auto phone-scroll"></div>
       </div>
 
       <div class="flex items-center justify-between mb-2.5 ml-0.5">
@@ -163,17 +163,23 @@
         <div id="nutritionList" class="space-y-3.5"></div>
       </div>
 
-      <!-- self rules (limits) with per-item privacy -->
+      <!-- self rules (limits) with per-item privacy + add/edit, streak, resist -->
       <div class="rounded-2xl bg-card border border-line shadow-card p-4 mt-5">
         <div class="flex items-center justify-between mb-3">
           <p class="text-[13px] font-extrabold text-ink">今週の自分ルール</p>
-          <span class="text-[10px] text-faint">タップで公開範囲を切替</span>
+          <button class="rule-add pop text-[11px] font-bold text-accent">＋ ルール追加</button>
         </div>
         <div id="limitList" class="flex flex-wrap gap-2"></div>
-        <button class="resist-add pop w-full mt-3.5 flex items-center justify-center gap-2 text-[13px] font-extrabold text-accent bg-asoft border border-aline rounded-2xl py-3">
+        <p class="text-[10px] text-faint mt-2">タグをタップ→公開範囲を切替 ・ ✕ で削除</p>
+
+        <div class="flex items-center justify-between mt-4 pt-3.5 border-t border-line">
+          <span class="flex items-center gap-1.5 text-[12px] font-extrabold text-ink">🔥 有言実行 <span class="text-accent" id="streakCount">6</span> 連続</span>
+          <span id="resistCount" class="text-[11px] font-bold text-faint">今週 0回 踏みとどまった</span>
+        </div>
+        <button class="resist-add pop w-full mt-3 flex items-center justify-center gap-2 text-[13px] font-extrabold text-accent bg-asoft border border-aline rounded-2xl py-3">
           <span class="text-[15px]">🛡</span>「踏みとどまった」を記録
         </button>
-        <p class="text-[10px] text-faint text-center mt-2">守れなくても咎めない。やめられた時だけそっと褒める</p>
+        <p class="text-[10px] text-faint text-center mt-2">守れなくても咎めない。やめられた時だけそっと褒める（タイムライン投稿はバッチ2）</p>
       </div>
 
       <div class="h-16"></div><!-- spacer so the fixed 運動開始 bar never covers the last card -->
@@ -341,6 +347,21 @@
     <button id="profileSave" class="pop w-full bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">保存</button>
   </div>
 
+  <!-- add self-rule sheet (mock) -->
+  <div id="ruleScrim" class="sheet-scrim absolute inset-0 z-40 hidden"></div>
+  <div id="ruleSheet" class="sheet absolute inset-x-0 bottom-0 z-50 bg-card rounded-t-[24px] border-t border-line px-5 pt-3 pb-7">
+    <div class="w-10 h-1 rounded-full bg-line mx-auto mb-4"></div>
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-[16px] font-extrabold text-ink">自分ルールを追加</p>
+      <button id="ruleCancel" class="pop text-[12px] font-bold text-sub">閉じる</button>
+    </div>
+    <label class="block text-[11px] font-bold text-faint mb-1.5">ルール</label>
+    <input id="rfLabel" type="text" placeholder="例: 揚げ物は週1まで" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-4">
+    <label class="block text-[11px] font-bold text-faint mb-1.5">週の回数目標（任意）</label>
+    <input id="rfTotal" type="number" inputmode="numeric" placeholder="例: 2" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-1">
+    <button id="ruleSave" class="pop w-full mt-3 bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">追加</button>
+  </div>
+
 </div>
 
 <script>
@@ -482,18 +503,30 @@ function renderWeek(){
     </button>`;
   }).join('');
 }
-const intents = [
-  {who:'boy', tag:'背中'}, {who:'yuki', tag:'有酸素'}, {who:'taichi', tag:'胸トレ'}, {who:'mio', tag:'脚'}
-];
-function renderIntent(){
-  document.getElementById('intentRow').innerHTML = intents.map(it=>{
-    const m=members[it.who];
-    return `<div class="flex flex-col items-center gap-2 shrink-0 w-[52px]">
-      <div class="relative">${avatar(m,44)}
-        <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ring-2 ring-card" style="background:${tagDot[it.tag]}"></span>
+// today's group activity (replaces old intent row). weight is shared as 前週比 only — never raw kg.
+const memberShare = { boy:{wt:'▼0.8kg'}, yuki:{wt:'▼0.3kg'}, taichi:{wt:'▲0.2kg'}, mio:{wt:null} };
+function renderTodayList(){
+  const order=['boy','yuki','taichi','mio'];
+  document.getElementById('todayList').innerHTML = order.map(k=>{
+    const m=members[k];
+    const wk=logEntries.find(e=>e.type==='workout'&&e.who===k&&e.date===TODAY);
+    const sh=memberShare[k]||{};
+    const right = wk
+      ? (()=>{const s=planStat[wk.status]||planStat.planned; return `<span class="flex items-center gap-1 text-[11px] font-bold ${s.cls}"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.check?'✓':''}${s.label}</span>`;})()
+      : `<span class="text-[11px] font-bold text-faint">未宣言</span>`;
+    const wtDelta = sh.wt
+      ? `<span class="text-[11px] font-bold ${sh.wt.startsWith('▼')?'text-accent':'text-sub'}">${sh.wt}</span>`
+      : `<span class="text-[10px] text-faint">体重非共有</span>`;
+    return `<div class="flex items-center gap-2.5">
+      ${avatar(m,32)}
+      <div class="min-w-0">
+        <p class="text-[13px] font-extrabold text-ink leading-none">${m.name}</p>
+        <div class="mt-1.5">${wk?chip(wk.tag, wk.status==='planned'?'':wk.status):`<span class="text-[11px] text-faint">—</span>`}</div>
       </div>
-      <span class="text-[11px] font-bold text-ink leading-none">${m.name}</span>
-      <span class="text-[10px] font-bold text-sub leading-none">${it.tag}</span>
+      <div class="ml-auto flex flex-col items-end gap-1.5">
+        ${right}
+        ${wtDelta}
+      </div>
     </div>`;
   }).join('');
 }
@@ -669,11 +702,37 @@ function renderLimits(){
   document.getElementById('limitList').innerHTML = limits.map((l,i)=>{
     const sc=scopes[l.scope]; const pub=l.scope!==3;
     const count = l.total ? `<span class="text-[10px] font-extrabold ${pub?'text-accent':'text-sub'}">${l.done}/${l.total}</span>` : '';
-    return `<button class="limit pop inline-flex items-center gap-2 text-[12px] font-bold px-3 py-2 rounded-2xl border ${pub?'bg-asoft border-aline text-ink':'bg-card border-line text-sub'}" data-i="${i}">
-      <span>${l.emoji} ${l.label}</span>${count}
+    return `<div class="limit pop inline-flex items-center gap-2 text-[12px] font-bold px-3 py-2 rounded-2xl border ${pub?'bg-asoft border-aline text-ink':'bg-card border-line text-sub'}" data-i="${i}">
+      <span class="cursor-pointer">${l.emoji} ${l.label}</span>${count}
       <span class="flex items-center gap-1 text-[10px] ${pub?'text-accent':'text-faint'}">${sc.ico}${sc.label}</span>
-    </button>`;
+      <span class="limit-del cursor-pointer text-faint text-[12px] leading-none pl-0.5">✕</span>
+    </div>`;
   }).join('');
+}
+
+/* ---------- self-rule add + resist record (record-only; timeline post = batch2) ---------- */
+let resistWeek=0;
+function recordResist(){
+  resistWeek++;
+  const el=document.getElementById('resistCount');
+  if(el) el.textContent=`今週 ${resistWeek}回 踏みとどまった`;
+}
+function openRule(){
+  document.getElementById('rfLabel').value='';
+  document.getElementById('rfTotal').value='';
+  document.getElementById('ruleScrim').classList.remove('hidden');
+  document.getElementById('ruleSheet').classList.add('open');
+}
+function closeRule(){
+  document.getElementById('ruleSheet').classList.remove('open');
+  document.getElementById('ruleScrim').classList.add('hidden');
+}
+function saveRule(){
+  const label=(document.getElementById('rfLabel').value||'').trim();
+  if(!label){ closeRule(); return; }
+  const total=parseInt(document.getElementById('rfTotal').value)||0;
+  limits.push({type:'limit', emoji:'🎯', label, done:0, total, scope:1});
+  closeRule(); renderLimits();
 }
 
 /* ---------- PROGRESS group ---------- */
@@ -829,19 +888,18 @@ document.addEventListener('click',e=>{
     seg.classList.add('active'); seg.classList.remove('text-sub');
     updateWeight(seg.dataset.seg);
   }
+  const ldel=e.target.closest('.limit-del');
+  if(ldel){ const li=ldel.closest('.limit'); if(li){ limits.splice(+li.dataset.i,1); renderLimits(); } }
   const lim=e.target.closest('.limit');
-  if(lim){
+  if(lim && !ldel){
     const i=+lim.dataset.i;
     limits[i].scope=(limits[i].scope+1)%scopes.length;
     renderLimits();
   }
-  const radd=e.target.closest('.resist-add');
-  if(radd){
-    posts.unshift({kind:'resist', who:'boy', time:'いま', ruleLabel:'ラーメン我慢',
-      text:'コンビニのラーメン棚の前で踏みとどまった。よくやった自分', r:{fire:0,muscle:0,clap:0}});
-    renderFeed();
-    showPage('feed');
-  }
+  if(e.target.closest('.rule-add')) openRule();
+  if(e.target.closest('#ruleSave')) saveRule();
+  if(e.target.closest('#ruleCancel')||e.target.closest('#ruleScrim')) closeRule();
+  if(e.target.closest('.resist-add')) recordResist();
   const day=e.target.closest('.day-pill');
   if(day){ selectedDate=day.dataset.date; renderWeek(); renderDayList(); }
 
@@ -878,7 +936,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('input', e=>{ if(e.target.closest('#profileSheet')) updateProfilePreview(); });
 
 /* ---------- init ---------- */
-renderFeedAvatars(); renderFeed(); renderWeek(); renderIntent(); renderDayList(); renderGroup();
+renderFeedAvatars(); renderFeed(); renderWeek(); renderTodayList(); renderDayList(); renderGroup();
 renderNutrition(); renderLimits(); renderMonth(); renderMaintCaption();
 </script>
 </body>
