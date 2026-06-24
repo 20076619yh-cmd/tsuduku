@@ -48,7 +48,7 @@
   .react.reacted{ background:#E8F6EF !important; color:#14B87C !important; border-color:#CDEBDD !important; }
   .seg-btn.active{ background:#181D1A; color:#fff; }
   .vseg.active,.sf-type.active{ background:#181D1A; color:#fff; }
-  .sf-tag.sel{ background:#181D1A; color:#fff; border-color:#181D1A; }
+  .sf-tag.sel{ background:#14B87C; color:#fff; border-color:#14B87C; }
   .sheet{ transform:translateY(110%); transition:transform .3s cubic-bezier(.4,0,.2,1); max-height:86%; overflow-y:auto; box-shadow:0 -8px 30px rgba(24,29,26,.12); }
   .sheet.open{ transform:translateY(0); }
   .sheet-scrim{ background:rgba(24,29,26,.35); }
@@ -517,14 +517,14 @@ const memberShare = { boy:{wt:'▼0.8kg'}, yuki:{wt:'▼0.3kg'}, taichi:{wt:'▲
 // type-tagged (CLAUDE.md「Schedule拡張仕様」). workout + weight live here; nutrition_goal /
 // limit / cheat_day stay as their own mock arrays below.
 const logEntries = [
-  {date:'2026-06-20', type:'workout', who:'taichi', tag:'胸トレ', time:'12:30', status:'done'},
-  {date:'2026-06-20', type:'workout', who:'yuki',   tag:'有酸素', time:'7:00',  status:'done'},
-  {date:'2026-06-20', type:'workout', who:'boy',    tag:'背中',  time:'19:00', status:'changed', note:'21:00→19:00'},
-  {date:'2026-06-20', type:'workout', who:'mio',    tag:'脚',    time:'21:00', status:'todo'},
-  {date:'2026-06-18', type:'workout', who:'boy', tag:'胸トレ', time:'19:30', status:'done'},
-  {date:'2026-06-16', type:'workout', who:'boy', tag:'脚',     time:'20:00', status:'done'},
-  {date:'2026-06-13', type:'workout', who:'boy', tag:'背中',   time:'18:00', status:'done'},
-  {date:'2026-06-11', type:'workout', who:'boy', tag:'肩・腕', time:'19:00', status:'done'},
+  {date:'2026-06-20', type:'workout', who:'taichi', tags:['胸トレ','肩・腕'], time:'12:30', status:'done'},
+  {date:'2026-06-20', type:'workout', who:'yuki',   tags:['有酸素'], time:'7:00',  status:'done'},
+  {date:'2026-06-20', type:'workout', who:'boy',    tags:['背中'],  time:'19:00', status:'changed', note:'21:00→19:00'},
+  {date:'2026-06-20', type:'workout', who:'mio',    tags:['脚'],    time:'21:00', status:'todo'},
+  {date:'2026-06-18', type:'workout', who:'boy', tags:['胸トレ'], time:'19:30', status:'done'},
+  {date:'2026-06-16', type:'workout', who:'boy', tags:['脚'],     time:'20:00', status:'done'},
+  {date:'2026-06-13', type:'workout', who:'boy', tags:['背中'],   time:'18:00', status:'done'},
+  {date:'2026-06-11', type:'workout', who:'boy', tags:['肩・腕'], time:'19:00', status:'done'},
   {date:'2026-06-20', type:'weight', who:'boy', kg:71.0},
   {date:'2026-06-18', type:'weight', who:'boy', kg:71.3},
   {date:'2026-06-16', type:'weight', who:'boy', kg:71.6},
@@ -543,8 +543,8 @@ function workoutCard(p){
   return `<div class="flex items-center gap-3 rounded-2xl bg-card border border-line shadow-card p-3.5 ${s.dim?'opacity-60':''}">
     ${avatar(m,40)}
     <div class="flex-1">
-      <div class="flex items-center gap-2">
-        <span class="text-[14px] font-extrabold text-ink">${m.name}</span>${chip(p.tag, p.status==='planned'?'':p.status)}
+      <div class="flex flex-wrap items-center gap-1.5">
+        <span class="text-[14px] font-extrabold text-ink">${m.name}</span>${(p.tags||[]).map(t=>chip(t)).join('')}
       </div>
       <p class="text-[11px] text-faint mt-1">予定 ${p.time}${p.note?` ・ <span class="font-bold text-[#E0A53A]">${p.note}</span>`:''}</p>
     </div>
@@ -582,9 +582,9 @@ function renderMonth(){
   for(let d=1;d<=days;d++){
     const ds=ymd(y,m,d);
     const isToday=ds===TODAY, sel=ds===selectedDate;
-    const dayWk=logEntries.filter(e=>e.type==='workout'&&e.date===ds);
-    const dots=dayWk.slice(0,3).map(e=>`<span class="w-1.5 h-1.5 rounded-full" style="background:${tagDot[e.tag]||'#9AA09A'}"></span>`).join('');
-    const more=dayWk.length>3?`<span class="text-[8px] font-bold text-faint leading-none">+${dayWk.length-3}</span>`:'';
+    const dayTags=logEntries.filter(e=>e.type==='workout'&&e.date===ds).flatMap(e=>e.tags||[]);
+    const dots=dayTags.slice(0,3).map(t=>`<span class="w-1.5 h-1.5 rounded-full" style="background:${tagDot[t]||'#9AA09A'}"></span>`).join('');
+    const more=dayTags.length>3?`<span class="text-[8px] font-bold text-faint leading-none">+${dayTags.length-3}</span>`:'';
     const numCls = sel
       ? (isToday?'bg-accent text-white ring-2 ring-aline':'bg-accent text-white')
       : (isToday?'text-accent ring-1 ring-accent':'text-ink');
@@ -607,8 +607,8 @@ function renderMonthDetail(){
         return `<div class="flex items-center gap-2.5">
           ${avatar(mem,28)}
           <span class="text-[12px] font-bold text-ink w-12 shrink-0">${mem.name}</span>
-          ${chip(e.tag, e.status==='planned'?'':e.status)}
-          <span class="ml-auto flex items-center gap-1 text-[11px] font-bold ${s.cls}"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.check?'✓':''}${s.label}</span>
+          <div class="flex flex-wrap items-center gap-1.5">${(e.tags||[]).map(t=>chip(t)).join('')}</div>
+          <span class="ml-auto flex items-center gap-1 text-[11px] font-bold ${s.cls} shrink-0"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.check?'✓':''}${s.label}</span>
         </div>`;
       }).join('')+`</div>`
     : `<p class="text-[11px] text-faint">この日の予定はまだありません</p>`;
@@ -618,7 +618,7 @@ function renderMonthDetail(){
 
 /* ---------- bottom sheet (declare / log) ---------- */
 const SHEET_TAGS=['胸トレ','背中','脚','肩・腕','有酸素','ストレッチ','休養'];
-let sfType='workout', sfTag='背中';
+let sfType='workout', sfTags=['背中'];
 function setSheetType(t){
   sfType=t;
   document.querySelectorAll('.sf-type').forEach(b=>{
@@ -630,7 +630,7 @@ function setSheetType(t){
 }
 function renderSheetTags(){
   document.getElementById('sfTags').innerHTML=SHEET_TAGS.map(t=>
-    `<button class="sf-tag pop text-[11px] font-bold px-3 py-1.5 rounded-full border ${t===sfTag?'sel':'border-line text-ink bg-card'}" data-tag="${t}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style="background:${tagDot[t]||'#9AA09A'}"></span>${t}</button>`
+    `<button class="sf-tag pop text-[11px] font-bold px-3 py-1.5 rounded-full border ${sfTags.includes(t)?'sel':'border-line text-ink bg-card'}" data-tag="${t}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style="background:${tagDot[t]||'#9AA09A'}"></span>${t}</button>`
   ).join('');
 }
 function openSheet(type){
@@ -649,7 +649,7 @@ function confirmSheet(){
   const date=document.getElementById('sfDate').value||selectedDate;
   if(sfType==='workout'){
     const time=document.getElementById('sfTime').value||'—';
-    logEntries.push({date,type:'workout',who:CURRENT_USER,tag:sfTag,time,status: date<TODAY?'done':'planned'});
+    if(sfTags.length) logEntries.push({date,type:'workout',who:CURRENT_USER,tags:sfTags.slice(),time,status: date<TODAY?'done':'planned'});
   }else if(sfType==='weight'){
     const kg=parseFloat(document.getElementById('sfKg').value);
     if(!isNaN(kg)){
@@ -934,7 +934,8 @@ document.addEventListener('click',e=>{
   if(e.target.closest('.declare-btn')||e.target.closest('.day-add')) openSheet('workout');
   if(e.target.closest('.weight-add')) openSheet('weight');
   const sft=e.target.closest('.sf-type'); if(sft) setSheetType(sft.dataset.sftype);
-  const stag=e.target.closest('.sf-tag'); if(stag){ sfTag=stag.dataset.tag; renderSheetTags(); }
+  const stag=e.target.closest('.sf-tag');
+  if(stag){ const t=stag.dataset.tag; const i=sfTags.indexOf(t); if(i>=0) sfTags.splice(i,1); else sfTags.push(t); renderSheetTags(); }
   if(e.target.closest('#sheetConfirm')) confirmSheet();
   if(e.target.closest('#sheetCancel')||e.target.closest('#sheetScrim')) closeSheet();
 
