@@ -112,6 +112,9 @@
         </div>
       </div>
 
+      <!-- cheat day: the star of Schedule -->
+      <div id="cheatDay" class="mb-5"></div>
+
       <div class="rounded-2xl bg-card border border-line shadow-card p-4 mb-5">
         <p class="text-[13px] font-extrabold text-ink mb-0.5">きょう、誰が何をする？</p>
         <p class="text-[11px] text-faint mb-3.5">先に宣言＝サボれない</p>
@@ -120,6 +123,25 @@
 
       <p class="text-[12px] font-bold text-sub mb-2.5 ml-0.5">きょうの予定</p>
       <div id="planList" class="space-y-2.5"></div>
+
+      <!-- nutrition goals: thin progress, no shame -->
+      <div class="rounded-2xl bg-card border border-line shadow-card p-4 mt-5">
+        <p class="text-[13px] font-extrabold text-ink mb-3.5">今週の食事ゴール</p>
+        <div id="nutritionList" class="space-y-3.5"></div>
+      </div>
+
+      <!-- self rules (limits) with per-item privacy -->
+      <div class="rounded-2xl bg-card border border-line shadow-card p-4 mt-5">
+        <div class="flex items-center justify-between mb-3">
+          <p class="text-[13px] font-extrabold text-ink">今週の自分ルール</p>
+          <span class="text-[10px] text-faint">タップで公開範囲を切替</span>
+        </div>
+        <div id="limitList" class="flex flex-wrap gap-2"></div>
+        <button class="resist-add pop w-full mt-3.5 flex items-center justify-center gap-2 text-[13px] font-extrabold text-accent bg-asoft border border-aline rounded-2xl py-3">
+          <span class="text-[15px]">🛡</span>「踏みとどまった」を記録
+        </button>
+        <p class="text-[10px] text-faint text-center mt-2">守れなくても咎めない。やめられた時だけそっと褒める</p>
+      </div>
     </section>
 
     <!-- ============ PROGRESS (のび) ============ -->
@@ -244,6 +266,7 @@ function hudCell(label,val,color){
 
 /* ---------- FEED ---------- */
 const posts = [
+  { kind:'resist', who:'mio', time:'20:10', ruleLabel:'飲みは週2まで', text:'金曜の誘い、今週もう2回行ったから今日はスルーできた。えらい自分', r:{fire:6,muscle:1,clap:7} },
   { who:'yuki', time:'7:20', tags:['有酸素'], cal:'-280', calNeg:true, dur:'42分', burn:'280', intake:'1,650', ph:'linear-gradient(135deg,#EEF3F0,#E6EFEA)', phIco:'🏃',
     text:'朝ラン5km完了。今日は脚が軽い', r:{fire:5,muscle:2,clap:3} },
   { who:'taichi', time:'12:40', tags:['胸トレ','肩・腕'], cal:'+150', calNeg:false, dur:'65分', burn:'320', intake:'2,300', ph:'linear-gradient(135deg,#F1EFEC,#ECE9E4)', phIco:'🏋️',
@@ -258,6 +281,26 @@ function renderFeedAvatars(){
 function renderFeed(){
   document.getElementById('feedList').innerHTML = posts.map((p,i)=>{
     const m=members[p.who];
+    if(p.kind==='resist') return `
+    <article class="rounded-2xl bg-asoft border border-aline shadow-card overflow-hidden">
+      <div class="flex items-center gap-3 px-4 pt-3.5">
+        ${avatar(m,38)}
+        <div class="flex-1">
+          <p class="text-[14px] font-extrabold text-ink leading-none">${m.name}</p>
+          <p class="text-[11px] text-faint mt-1">きょう ${p.time}</p>
+        </div>
+        <span class="inline-flex items-center gap-1 text-[11px] font-bold text-accent bg-card border border-aline px-2.5 py-1 rounded-full">🛡 踏みとどまった</span>
+      </div>
+      <div class="px-4 pt-3 pb-1">
+        <p class="text-[14px] text-ink leading-snug">${p.text}</p>
+        <div class="mt-2.5 flex items-center gap-1.5 text-[12px] font-bold text-accent">
+          <span class="w-1.5 h-1.5 rounded-full bg-accent"></span>自分ルール「${p.ruleLabel}」を守った
+        </div>
+      </div>
+      <div class="flex gap-2 px-4 py-3">
+        ${reactBtn(i,'fire','🔥',p.r.fire)}${reactBtn(i,'muscle','💪',p.r.muscle)}${reactBtn(i,'clap','👏',p.r.clap)}
+      </div>
+    </article>`;
     const calColor = p.calNeg ? '#14B87C' : '#6E736C';
     return `
     <article class="rounded-2xl bg-card border border-line shadow-card overflow-hidden">
@@ -322,11 +365,13 @@ function renderIntent(){
     </div>`;
   }).join('');
 }
+// Schedule items are type-tagged (CLAUDE.md「Schedule拡張仕様」). workout items live here;
+// nutrition_goal / limit / cheat_day are separate mock arrays below.
 const plans = [
-  {who:'taichi', tag:'胸トレ', time:'12:30', status:'done'},
-  {who:'yuki',   tag:'有酸素', time:'7:00',  status:'done'},
-  {who:'boy',    tag:'背中',  time:'19:00', status:'changed', note:'21:00→19:00'},
-  {who:'mio',    tag:'脚',    time:'21:00', status:'todo'},
+  {type:'workout', who:'taichi', tag:'胸トレ', time:'12:30', status:'done'},
+  {type:'workout', who:'yuki',   tag:'有酸素', time:'7:00',  status:'done'},
+  {type:'workout', who:'boy',    tag:'背中',  time:'19:00', status:'changed', note:'21:00→19:00'},
+  {type:'workout', who:'mio',    tag:'脚',    time:'21:00', status:'todo'},
 ];
 function renderPlans(){
   const stat = {
@@ -349,6 +394,63 @@ function renderPlans(){
         <span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.check?'✓ ':''}${s.label}
       </span>
     </div>`;
+  }).join('');
+}
+
+/* ---------- SCHEDULE: cheat day / nutrition / limits (type-tagged items) ---------- */
+const cheatDay = { type:'cheat_day', emoji:'🍜', title:'土曜はチートデイ', sub:'あと2日 ・ ラーメン解禁！我慢の先のご褒美', who:['boy','yuki','taichi','mio'] };
+function renderCheatDay(){
+  document.getElementById('cheatDay').innerHTML = `
+  <div class="rounded-2xl border border-aline bg-asoft p-4">
+    <div class="flex items-center gap-3">
+      <div class="w-12 h-12 rounded-2xl bg-card border border-aline flex items-center justify-center text-[26px] shrink-0">${cheatDay.emoji}</div>
+      <div class="flex-1 min-w-0">
+        <span class="text-[10px] font-extrabold text-accent bg-card border border-aline px-2 py-0.5 rounded-full">みんなで解禁</span>
+        <p class="text-[15px] font-extrabold text-ink mt-1.5 leading-tight">${cheatDay.title} 🎉</p>
+        <p class="text-[11px] text-sub mt-1">${cheatDay.sub}</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 mt-3 pt-3 border-t border-aline">
+      <div class="flex -space-x-2">${cheatDay.who.map(k=>`<div class="ring-2 ring-asoft rounded-full">${avatar(members[k],24)}</div>`).join('')}</div>
+      <span class="text-[11px] font-bold text-sub">${cheatDay.who.length}人が参加</span>
+    </div>
+  </div>`;
+}
+
+const nutritionGoals = [
+  {type:'nutrition_goal', label:'2000kcal以内の日', done:3, total:5},
+  {type:'nutrition_goal', label:'タンパク質120g達成', done:4, total:7},
+];
+function renderNutrition(){
+  document.getElementById('nutritionList').innerHTML = nutritionGoals.map(g=>{
+    const pct=Math.round(g.done/g.total*100);
+    return `<div>
+      <div class="flex items-center justify-between mb-1.5">
+        <span class="text-[12px] font-bold text-ink">${g.label}</span>
+        <span class="text-[11px] font-extrabold text-sub">${g.done}<span class="text-faint">/${g.total}日</span></span>
+      </div>
+      <div class="h-1.5 rounded-full bg-[#F0EFEB] overflow-hidden"><div class="h-full rounded-full bg-accent" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+// per-item privacy scopes (no-shame: private is just grey, never a warning)
+const scopes=[
+  {k:'all',label:'全員',ico:'🌐'},{k:'group',label:'グループ',ico:'👥'},
+  {k:'some',label:'特定の人',ico:'＠'},{k:'self',label:'自分だけ',ico:'🔒'},
+];
+const limits = [
+  {type:'limit', emoji:'🍺', label:'飲みは週2まで', done:1, total:2, scope:1},
+  {type:'limit', emoji:'🍜', label:'ラーメン我慢', done:0, total:0, scope:3},
+];
+function renderLimits(){
+  document.getElementById('limitList').innerHTML = limits.map((l,i)=>{
+    const sc=scopes[l.scope]; const pub=l.scope!==3;
+    const count = l.total ? `<span class="text-[10px] font-extrabold ${pub?'text-accent':'text-sub'}">${l.done}/${l.total}</span>` : '';
+    return `<button class="limit pop inline-flex items-center gap-2 text-[12px] font-bold px-3 py-2 rounded-2xl border ${pub?'bg-asoft border-aline text-ink':'bg-card border-line text-sub'}" data-i="${i}">
+      <span>${l.emoji} ${l.label}</span>${count}
+      <span class="flex items-center gap-1 text-[10px] ${pub?'text-accent':'text-faint'}">${sc.ico}${sc.label}</span>
+    </button>`;
   }).join('');
 }
 
@@ -431,6 +533,19 @@ document.addEventListener('click',e=>{
     seg.classList.add('active'); seg.classList.remove('text-sub');
     updateWeight(seg.dataset.seg);
   }
+  const lim=e.target.closest('.limit');
+  if(lim){
+    const i=+lim.dataset.i;
+    limits[i].scope=(limits[i].scope+1)%scopes.length;
+    renderLimits();
+  }
+  const radd=e.target.closest('.resist-add');
+  if(radd){
+    posts.unshift({kind:'resist', who:'boy', time:'いま', ruleLabel:'ラーメン我慢',
+      text:'コンビニのラーメン棚の前で踏みとどまった。よくやった自分', r:{fire:0,muscle:0,clap:0}});
+    renderFeed();
+    showPage('feed');
+  }
   const day=e.target.closest('.day-pill');
   if(day){
     document.querySelectorAll('.day-pill').forEach(d=>{
@@ -446,6 +561,7 @@ document.addEventListener('click',e=>{
 
 /* ---------- init ---------- */
 renderFeedAvatars(); renderFeed(); renderWeek(); renderIntent(); renderPlans(); renderGroup();
+renderCheatDay(); renderNutrition(); renderLimits();
 </script>
 </body>
 </html>
