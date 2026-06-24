@@ -133,7 +133,6 @@
         <p id="dayListLabel" class="text-[12px] font-bold text-sub">きょうの予定</p>
         <button class="day-add pop text-[11px] font-bold text-accent">＋ 追記</button>
       </div>
-      <div id="dayWeight" class="mb-2.5"></div>
       <div id="planList" class="space-y-2.5"></div>
 
       <!-- today's meal input (intake feeds the 記録 calorie-balance graph) -->
@@ -556,13 +555,6 @@ function workoutCard(p){
 }
 function renderDayList(){
   document.getElementById('dayListLabel').textContent = fmtLabel(selectedDate);
-  const w = logEntries.find(e=>e.type==='weight'&&e.who===CURRENT_USER&&e.date===selectedDate);
-  document.getElementById('dayWeight').innerHTML = w
-    ? `<div class="flex items-center justify-between rounded-2xl bg-asoft border border-aline px-4 py-3">
-         <span class="text-[12px] font-bold text-sub">あなたの体重</span>
-         <span class="text-[15px] font-extrabold text-ink">${w.kg}<span class="text-[11px] text-faint font-bold ml-0.5">kg</span></span>
-       </div>`
-    : `<button class="weight-add pop w-full flex items-center justify-center gap-1.5 text-[12px] font-bold text-accent bg-card border border-dashed border-aline rounded-2xl py-3">＋ 体重を記録</button>`;
   const items = logEntries.filter(e=>e.type==='workout'&&e.date===selectedDate);
   document.getElementById('planList').innerHTML = items.length
     ? items.map(workoutCard).join('')
@@ -790,8 +782,10 @@ function initCharts(){
       borderRadius:4, barThickness:14 }]},
     options:{ plugins:{legend:{display:false},tooltip:{enabled:false}}, scales:{
       y:{ min:-600, max:600,
+          // fixed gridlines at -500/-250/0/250/500 (no auto-scaling); deficit side labeled, surplus hidden
+          afterBuildTicks:(s)=>{ s.ticks=[-500,-250,0,250,500].map(value=>({value})); },
           grid:{ color:(ctx)=> ctx.tick.value>0 ? 'rgba(0,0,0,0)' : (ctx.tick.value===0 ? '#CDCFC9' : '#EDECE8') }, border:{display:false},
-          ticks:{ stepSize:250, font:{size:9}, color:'#A2A69F', callback:(v)=> v<0 ? String(-v) : '' },
+          ticks:{ font:{size:9}, color:'#A2A69F', callback:(v)=> v<0 ? String(-v) : '' },
           afterFit:(s)=>{s.width=36;} },
       x:{grid:{display:false},border:{display:false},ticks:{font:{size:11}}} }, maintainAspectRatio:false }
   });
