@@ -48,7 +48,7 @@
   .react.reacted{ background:#E8F6EF !important; color:#14B87C !important; border-color:#CDEBDD !important; }
   .seg-btn.active{ background:#181D1A; color:#fff; }
   .vseg.active,.sf-type.active{ background:#181D1A; color:#fff; }
-  .sf-tag.sel{ background:#14B87C; color:#fff; border-color:#14B87C; }
+  .sf-tag.sel,.start-tag.sel{ background:#14B87C; color:#fff; border-color:#14B87C; }
   .sheet{ transform:translateY(110%); transition:transform .3s cubic-bezier(.4,0,.2,1); max-height:86%; overflow-y:auto; box-shadow:0 -8px 30px rgba(24,29,26,.12); }
   .sheet.open{ transform:translateY(0); }
   .sheet-scrim{ background:rgba(24,29,26,.35); }
@@ -201,7 +201,7 @@
         <div class="grid grid-cols-3 divide-x divide-line">
           <div class="text-center px-1">
             <p class="text-[11px] text-faint font-bold mb-1.5">運動日数</p>
-            <p class="text-[26px] font-extrabold text-ink leading-none">4<span class="text-[12px] text-faint font-bold ml-0.5">日</span></p>
+            <p class="text-[26px] font-extrabold text-ink leading-none"><span id="statDays">4</span><span class="text-[12px] text-faint font-bold ml-0.5">日</span></p>
           </div>
           <div class="text-center px-1">
             <p class="text-[11px] text-faint font-bold mb-1.5">連続記録</p>
@@ -261,9 +261,7 @@
   <!-- bottom nav -->
   <!-- fixed start-workout CTA (schedule page only; above nav, own layer). Batch2: timer/post -->
   <div id="startBar" class="hidden absolute bottom-[86px] inset-x-0 z-20 flex justify-center px-5 pointer-events-none">
-    <button class="start-workout pop pointer-events-auto bg-accent text-white text-[13px] font-extrabold rounded-full shadow-lift px-6 py-3 flex items-center gap-2">
-      <span class="text-[12px]">▶</span>運動開始
-    </button>
+    <div id="startBarInner" class="pointer-events-auto"></div>
   </div>
 
   <nav class="absolute bottom-0 inset-x-0 bg-card/96 backdrop-blur border-t border-line px-7 pt-2.5 pb-5 flex justify-around z-30">
@@ -368,6 +366,39 @@
     <button id="ruleSave" class="pop w-full mt-3 bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">追加</button>
   </div>
 
+  <!-- start-workout category sheet (shown when today has no plan) -->
+  <div id="startScrim" class="sheet-scrim absolute inset-0 z-40 hidden"></div>
+  <div id="startSheet" class="sheet absolute inset-x-0 bottom-0 z-50 bg-card rounded-t-[24px] border-t border-line px-5 pt-3 pb-7">
+    <div class="w-10 h-1 rounded-full bg-line mx-auto mb-4"></div>
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-[16px] font-extrabold text-ink">何を運動する？</p>
+      <button id="startCancel" class="pop text-[12px] font-bold text-sub">閉じる</button>
+    </div>
+    <p class="text-[11px] text-faint mb-3">部位を選んで開始（複数可）</p>
+    <div id="startTags" class="flex flex-wrap gap-2 mb-5"></div>
+    <button id="startGo" class="pop w-full bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">この内容で開始</button>
+  </div>
+
+  <!-- post sheet (opens after timer stop) -->
+  <div id="postScrim" class="sheet-scrim absolute inset-0 z-40 hidden"></div>
+  <div id="postSheet" class="sheet absolute inset-x-0 bottom-0 z-50 bg-card rounded-t-[24px] border-t border-line px-5 pt-3 pb-7">
+    <div class="w-10 h-1 rounded-full bg-line mx-auto mb-4"></div>
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-[16px] font-extrabold text-ink">実施を記録</p>
+      <button id="postCancel" class="pop text-[12px] font-bold text-sub">閉じる</button>
+    </div>
+    <div class="flex items-center justify-between rounded-2xl bg-bg border border-line px-4 py-3 mb-4">
+      <div id="psTags" class="flex flex-wrap gap-1.5"></div>
+      <span id="psDur" class="text-[12px] font-bold text-sub shrink-0 ml-2"></span>
+    </div>
+    <label class="block text-[11px] font-bold text-faint mb-1.5">写真（任意）</label>
+    <input id="psPhoto" type="file" accept="image/*" class="w-full text-[12px] text-sub file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-asoft file:text-accent file:font-bold file:text-[12px]">
+    <div id="psPhotoPreview"></div>
+    <label class="block text-[11px] font-bold text-faint mb-1.5 mt-4">コメント（任意）</label>
+    <textarea id="psText" rows="3" placeholder="ひとことどうぞ（任意）" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink resize-none"></textarea>
+    <button id="postSubmit" class="pop w-full mt-3 bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">投稿する</button>
+  </div>
+
 </div>
 
 <script>
@@ -416,6 +447,85 @@ function createPost({kind='workout', who=CURRENT_USER, tags=[], dur=null, photo=
   return { id:'p'+(postSeq++), kind, who, scope, time:'いま', tags:(tags||[]).slice(), dur, photo, text, ruleLabel, r:{fire:0,muscle:0,clap:0} };
 }
 function addPost(p){ posts.unshift(p); renderFeed(); }
+
+/* ---------- workout timer (E2) + post flow (E) ---------- */
+let timerRunning=false, timerSec=0, timerInterval=null, timerTags=[];
+let startTags=[];           // category-select (no-plan start)
+let pendingPhoto=null, postCtx=null;
+const START_CATS=['胸トレ','背中','脚','肩・腕','有酸素','ストレッチ'];
+function fmtTimer(s){ return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
+function durFromSec(s){ const min=Math.max(1,Math.round(s/60)); if(min<60) return `${min}分`; const h=Math.floor(min/60), mm=min%60; return mm?`${h}時間${mm}分`:`${h}時間`; }
+function renderStartBar(){
+  const el=document.getElementById('startBarInner'); if(!el) return;
+  el.innerHTML = timerRunning
+    ? `<div class="bg-card border border-aline rounded-full shadow-lift pl-5 pr-2 py-2 flex items-center gap-3">
+         <span class="flex items-center gap-2 text-[14px] font-extrabold text-ink"><span class="w-2 h-2 rounded-full bg-accent animate-pulse"></span><span id="timerDisp">${fmtTimer(timerSec)}</span></span>
+         <span class="text-[11px] font-bold text-sub truncate max-w-[110px]">${timerTags.join('・')}</span>
+         <button class="stop-workout pop bg-accent text-white text-[12px] font-extrabold rounded-full px-4 py-2">運動終了</button>
+       </div>`
+    : `<button class="start-workout pop bg-accent text-white text-[13px] font-extrabold rounded-full shadow-lift px-6 py-3 flex items-center gap-2"><span class="text-[12px]">▶</span>運動開始</button>`;
+}
+function startTimer(tags){
+  timerTags=(tags||[]).slice(); timerSec=0; timerRunning=true;
+  if(timerInterval) clearInterval(timerInterval);
+  timerInterval=setInterval(()=>{ timerSec++; const d=document.getElementById('timerDisp'); if(d) d.textContent=fmtTimer(timerSec); },1000);
+  renderStartBar();
+}
+function onStartWorkout(){
+  const todays=logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&e.date===TODAY);
+  const tags=[...new Set(todays.flatMap(e=>e.tags||[]))];
+  if(tags.length) startTimer(tags);
+  else { startTags=[]; renderStartTags(); document.getElementById('startScrim').classList.remove('hidden'); document.getElementById('startSheet').classList.add('open'); }
+}
+function closeStartSheet(){ document.getElementById('startSheet').classList.remove('open'); document.getElementById('startScrim').classList.add('hidden'); }
+function renderStartTags(){
+  document.getElementById('startTags').innerHTML=START_CATS.map(t=>
+    `<button class="start-tag pop text-[12px] font-bold px-3 py-2 rounded-full border ${startTags.includes(t)?'sel':'border-line text-ink bg-card'}" data-tag="${t}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style="background:${tagDot[t]||'#9AA09A'}"></span>${t}</button>`
+  ).join('');
+}
+function onStartGo(){ if(!startTags.length) return; closeStartSheet(); startTimer(startTags); }
+function onStopWorkout(){
+  if(timerInterval) clearInterval(timerInterval);
+  timerRunning=false;
+  const dur=durFromSec(timerSec);
+  renderStartBar();
+  // (1) record the workout so it counts: calendar dots / 運動日数 reflect it
+  logEntries.push({id:newId(), date:TODAY, type:'workout', who:CURRENT_USER, tags:timerTags.slice(), time:'いま', dur, status:'done'});
+  rerenderAfterChange();
+  // (2) open the share (post) flow with the same tags + measured time
+  openPostSheet(timerTags, dur);
+}
+function openPostSheet(tags, dur){
+  pendingPhoto=null; postCtx={tags:(tags||[]).slice(), dur};
+  document.getElementById('psTags').innerHTML=(tags||[]).map(t=>chip(t)).join('');
+  document.getElementById('psDur').textContent='実施 '+dur;
+  document.getElementById('psPhotoPreview').innerHTML='';
+  document.getElementById('psText').value='';
+  document.getElementById('psPhoto').value='';
+  document.getElementById('postScrim').classList.remove('hidden');
+  document.getElementById('postSheet').classList.add('open');
+}
+function closePostSheet(){ document.getElementById('postSheet').classList.remove('open'); document.getElementById('postScrim').classList.add('hidden'); }
+function handlePhoto(file){
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{ pendingPhoto=ev.target.result; document.getElementById('psPhotoPreview').innerHTML=`<img src="${pendingPhoto}" class="w-full h-40 object-cover rounded-xl mt-2">`; };
+  reader.readAsDataURL(file);
+}
+function submitPost(){
+  if(!postCtx) return;
+  const text=document.getElementById('psText').value.trim();
+  addPost(createPost({kind:'workout', who:CURRENT_USER, tags:postCtx.tags, dur:postCtx.dur, photo:pendingPhoto, text, scope:'group'}));
+  postCtx=null; pendingPhoto=null;
+  closePostSheet();
+  showPage('feed');
+}
+// 記録ヒーローの「運動日数」を logEntries から算出（今週・本人・重複日を除く）
+function renderStats(){
+  const el=document.getElementById('statDays'); if(!el) return;
+  const days=new Set(logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&week.some(w=>w.date===e.date)).map(e=>e.date));
+  el.textContent=days.size;
+}
 function renderFeedAvatars(){
   document.getElementById('feedAvatars').innerHTML =
     ['taichi','yuki','boy'].map(k=>`<div class="ring-2 ring-bg rounded-full">${avatar(members[k],24)}</div>`).join('');
@@ -675,6 +785,7 @@ function closeSheet(){
 }
 function rerenderAfterChange(){
   renderWeek(); if(schedView==='month'){ renderMonth(); renderMonthDetail(); } renderDayList();
+  if(typeof renderStats==='function') renderStats();
   if(chartsReady) updateWeight(chartMode);
 }
 function confirmSheet(){
@@ -981,6 +1092,14 @@ document.addEventListener('click',e=>{
     addPost(createPost({kind:'resist', who:CURRENT_USER, ruleLabel:rule, text:'今日は誘惑に勝った。踏みとどまった自分をほめる', scope:'group'}));
     showPage('feed');
   }
+  if(e.target.closest('.start-workout')) onStartWorkout();
+  if(e.target.closest('.stop-workout')) onStopWorkout();
+  const sct=e.target.closest('.start-tag');
+  if(sct){ const t=sct.dataset.tag; const i=startTags.indexOf(t); if(i>=0) startTags.splice(i,1); else startTags.push(t); renderStartTags(); }
+  if(e.target.closest('#startGo')) onStartGo();
+  if(e.target.closest('#startCancel')||e.target.closest('#startScrim')) closeStartSheet();
+  if(e.target.closest('#postSubmit')) submitPost();
+  if(e.target.closest('#postCancel')||e.target.closest('#postScrim')) closePostSheet();
   const day=e.target.closest('.day-pill');
   if(day){ selectedDate=day.dataset.date; renderWeek(); renderDayList(); }
 
@@ -1016,10 +1135,11 @@ document.addEventListener('click',e=>{
 });
 // live maintenance preview while editing the profile sheet
 document.addEventListener('input', e=>{ if(e.target.closest('#profileSheet')) updateProfilePreview(); });
+document.addEventListener('change', e=>{ if(e.target.id==='psPhoto') handlePhoto(e.target.files && e.target.files[0]); });
 
 /* ---------- init ---------- */
 renderFeedAvatars(); renderFeed(); renderWeek(); renderDayList(); renderGroup();
-renderMeal(); renderLimits(); renderMonth(); renderMaintCaption();
+renderMeal(); renderLimits(); renderMonth(); renderMaintCaption(); renderStartBar(); renderStats();
 showPage('schedule');   // app opens on 予定 (also reveals the 運動開始 bar)
 </script>
 </body>
