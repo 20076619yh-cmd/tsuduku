@@ -135,6 +135,9 @@
       </div>
       <div id="planList" class="space-y-2.5"></div>
 
+      <!-- compact body-weight handle (edit/add); weight is displayed on 記録 -->
+      <div id="dayWeightRow" class="mt-3"></div>
+
       <!-- today's meal input (intake feeds the 記録 calorie-balance graph) -->
       <div class="rounded-2xl bg-card border border-line shadow-card p-4 mt-5">
         <div class="flex items-center justify-between mb-3">
@@ -286,7 +289,7 @@
       <p id="sheetTitle" class="text-[16px] font-extrabold text-ink">予定を宣言</p>
       <button id="sheetCancel" class="pop text-[12px] font-bold text-sub">閉じる</button>
     </div>
-    <div class="flex bg-bg border border-line rounded-full p-0.5 mb-4">
+    <div id="sfTypeToggle" class="flex bg-bg border border-line rounded-full p-0.5 mb-4">
       <button class="sf-type active flex-1 text-[12px] font-bold py-2 rounded-full" data-sftype="workout">運動</button>
       <button class="sf-type flex-1 text-[12px] font-bold py-2 rounded-full text-sub" data-sftype="weight">体重</button>
       <button class="sf-type flex-1 text-[12px] font-bold py-2 rounded-full text-sub" data-sftype="meal">食事</button>
@@ -315,6 +318,7 @@
       <p class="text-[10px] text-faint mt-2">食品DB検索なし。数字をざっくり入れるだけ。摂取kcalは記録のカロリー収支に反映</p>
     </div>
     <button id="sheetConfirm" class="pop w-full mt-3 bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">決定</button>
+    <button id="sheetDelete" class="hidden pop w-full mt-2 text-[13px] font-bold text-sub border border-line rounded-2xl py-3">このエントリを削除</button>
   </div>
 
   <!-- profile sheet (mock, no auth) -->
@@ -529,6 +533,10 @@ const logEntries = [
   {date:'2026-06-16', type:'weight', who:'boy', kg:71.6},
   {date:'2026-06-20', type:'meal', who:'boy', kcal:1850, protein:120, fat:55, carbs:180},
 ];
+// stable ids so any entry (workout/weight/meal) can be edited or deleted by reference
+let entrySeq=0;
+logEntries.forEach(e=>{ e.id='e'+(entrySeq++); });
+function newId(){ return 'e'+(entrySeq++); }
 const planStat = {
   done:   {label:'実施済み', cls:'text-accent',    dot:'#14B87C', dim:false, check:true},
   planned:{label:'これから', cls:'text-ink',       dot:'#E0A53A', dim:false, check:false},
@@ -539,7 +547,7 @@ function workoutCard(p){
   const m=members[p.who]; const s=planStat[p.status]||planStat.planned;
   const sh=memberShare[p.who]||{};
   const wtLine = sh.wt ? `<span class="text-[11px] font-bold ${sh.wt.startsWith('▼')?'text-accent':'text-sub'}">${sh.wt}</span>` : '';
-  return `<div class="flex items-center gap-3 rounded-2xl bg-card border border-line shadow-card p-3.5 ${s.dim?'opacity-60':''}">
+  return `<div class="entry-edit pop cursor-pointer flex items-center gap-3 rounded-2xl bg-card border border-line shadow-card p-3.5 ${s.dim?'opacity-60':''}" data-id="${p.id}">
     ${avatar(m,40)}
     <div class="flex-1">
       <div class="flex flex-wrap items-center gap-1.5">
@@ -563,6 +571,7 @@ function renderDayList(){
          <p class="text-[11px] text-faint mt-1">「＋追記」で宣言できます</p>
        </div>`;
   if(typeof renderMeal==='function') renderMeal();
+  if(typeof renderDayWeight==='function') renderDayWeight();
 }
 function renderMonth(){
   const {y,m}=calCursor;
@@ -596,7 +605,7 @@ function renderMonthDetail(){
   const body = items.length
     ? `<div class="space-y-2.5">`+items.map(e=>{
         const mem=members[e.who]; const s=planStat[e.status]||planStat.planned;
-        return `<div class="flex items-center gap-2.5">
+        return `<div class="entry-edit pop cursor-pointer flex items-center gap-2.5" data-id="${e.id}">
           ${avatar(mem,28)}
           <span class="text-[12px] font-bold text-ink w-12 shrink-0">${mem.name}</span>
           <div class="flex flex-wrap items-center gap-1.5">${(e.tags||[]).map(t=>chip(t)).join('')}</div>
@@ -610,7 +619,13 @@ function renderMonthDetail(){
 
 /* ---------- bottom sheet (declare / log) ---------- */
 const SHEET_TAGS=['胸トレ','背中','脚','肩・腕','有酸素','ストレッチ','休養'];
-let sfType='workout', sfTags=['背中'];
+let sfType='workout', sfTags=['背中'], sfEditId=null;
+function sheetTitle(){
+  const ed=sfEditId!=null;
+  if(sfType==='workout') return ed?'運動を編集':'予定を宣言';
+  if(sfType==='weight')  return ed?'体重を編集':'体重を記録';
+  return ed?'食事を編集':'食事を記録';
+}
 function setSheetType(t){
   sfType=t;
   document.querySelectorAll('.sf-type').forEach(b=>{
@@ -619,48 +634,89 @@ function setSheetType(t){
   document.getElementById('sfWorkout').classList.toggle('hidden',t!=='workout');
   document.getElementById('sfWeight').classList.toggle('hidden',t!=='weight');
   document.getElementById('sfMeal').classList.toggle('hidden',t!=='meal');
+  document.getElementById('sheetTitle').textContent=sheetTitle();
 }
 function renderSheetTags(){
   document.getElementById('sfTags').innerHTML=SHEET_TAGS.map(t=>
     `<button class="sf-tag pop text-[11px] font-bold px-3 py-1.5 rounded-full border ${sfTags.includes(t)?'sel':'border-line text-ink bg-card'}" data-tag="${t}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style="background:${tagDot[t]||'#9AA09A'}"></span>${t}</button>`
   ).join('');
 }
-function openSheet(type){
-  setSheetType(type||'workout');
-  document.getElementById('sfDate').value=selectedDate;
-  document.getElementById('sheetTitle').textContent = selectedDate<TODAY ? '記録を追加' : '予定を宣言';
-  renderSheetTags();
+function showSheet(){
   document.getElementById('sheetScrim').classList.remove('hidden');
   document.getElementById('sheet').classList.add('open');
+}
+function openSheet(type){
+  sfEditId=null; sfTags=['背中'];
+  ['sfTime','sfKg','sfKcal','sfProtein','sfFat','sfCarbs'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+  document.getElementById('sfTypeToggle').classList.remove('hidden');
+  document.getElementById('sheetDelete').classList.add('hidden');
+  setSheetType(type||'workout');
+  document.getElementById('sfDate').value=selectedDate;
+  renderSheetTags();
+  showSheet();
+}
+function openSheetEdit(id){
+  const en=logEntries.find(x=>x.id===id); if(!en) return;
+  sfEditId=id;
+  document.getElementById('sfTypeToggle').classList.add('hidden');   // lock type while editing
+  document.getElementById('sheetDelete').classList.remove('hidden');
+  setSheetType(en.type);
+  document.getElementById('sfDate').value=en.date;
+  if(en.type==='workout'){ sfTags=(en.tags||[]).slice(); renderSheetTags(); document.getElementById('sfTime').value=(en.time&&en.time!=='—')?en.time:''; }
+  else if(en.type==='weight'){ document.getElementById('sfKg').value=en.kg; }
+  else { document.getElementById('sfKcal').value=en.kcal; document.getElementById('sfProtein').value=en.protein??''; document.getElementById('sfFat').value=en.fat??''; document.getElementById('sfCarbs').value=en.carbs??''; }
+  showSheet();
 }
 function closeSheet(){
   document.getElementById('sheet').classList.remove('open');
   document.getElementById('sheetScrim').classList.add('hidden');
+  sfEditId=null;
+}
+function rerenderAfterChange(){
+  renderWeek(); if(schedView==='month'){ renderMonth(); renderMonthDetail(); } renderDayList();
+  if(chartsReady) updateWeight(chartMode);
 }
 function confirmSheet(){
   const date=document.getElementById('sfDate').value||selectedDate;
+  const editing=sfEditId!=null;
+  const target=editing?logEntries.find(e=>e.id===sfEditId):null;
   if(sfType==='workout'){
-    const time=document.getElementById('sfTime').value||'—';
-    if(sfTags.length) logEntries.push({date,type:'workout',who:CURRENT_USER,tags:sfTags.slice(),time,status: date<TODAY?'done':'planned'});
+    if(!sfTags.length){ closeSheet(); return; }
+    const status=editing&&target?target.status:(date<TODAY?'done':'planned');
+    const fields={date, tags:sfTags.slice(), time:document.getElementById('sfTime').value||'—', status};
+    if(editing&&target) Object.assign(target,fields);
+    else logEntries.push({id:newId(), type:'workout', who:CURRENT_USER, ...fields});
   }else if(sfType==='weight'){
     const kg=parseFloat(document.getElementById('sfKg').value);
     if(!isNaN(kg)){
-      const ex=logEntries.find(e=>e.type==='weight'&&e.who===CURRENT_USER&&e.date===date);
-      if(ex) ex.kg=kg; else logEntries.push({date,type:'weight',who:CURRENT_USER,kg});
+      if(editing&&target) Object.assign(target,{date,kg});
+      else{
+        const ex=logEntries.find(e=>e.type==='weight'&&e.who===CURRENT_USER&&e.date===date);
+        if(ex) ex.kg=kg; else logEntries.push({id:newId(),date,type:'weight',who:CURRENT_USER,kg});
+      }
     }
   }else{ // meal
     const kcal=parseInt(document.getElementById('sfKcal').value);
     if(!isNaN(kcal)){
       const num=id=>{const v=parseFloat(document.getElementById(id).value); return isNaN(v)?null:v;};
-      const rec={date,type:'meal',who:CURRENT_USER,kcal,protein:num('sfProtein'),fat:num('sfFat'),carbs:num('sfCarbs')};
-      const ex=logEntries.find(e=>e.type==='meal'&&e.who===CURRENT_USER&&e.date===date);
-      if(ex) Object.assign(ex,rec); else logEntries.push(rec);
+      const fields={date,kcal,protein:num('sfProtein'),fat:num('sfFat'),carbs:num('sfCarbs')};
+      if(editing&&target) Object.assign(target,fields);
+      else{
+        const ex=logEntries.find(e=>e.type==='meal'&&e.who===CURRENT_USER&&e.date===date);
+        if(ex) Object.assign(ex,fields); else logEntries.push({id:newId(),type:'meal',who:CURRENT_USER,...fields});
+      }
     }
   }
   selectedDate=date;
   closeSheet();
-  renderWeek(); if(schedView==='month') renderMonth(); renderDayList(); renderMeal();
-  if(chartsReady) updateWeight(chartMode);
+  rerenderAfterChange();
+}
+function deleteEntry(){
+  if(sfEditId==null) return;
+  const i=logEntries.findIndex(e=>e.id===sfEditId);
+  if(i>=0) logEntries.splice(i,1);
+  closeSheet();
+  rerenderAfterChange();
 }
 
 /* ---------- SCHEDULE: 本日の食事 / limits (type-tagged items) ---------- */
@@ -676,9 +732,22 @@ function renderMeal(){
     return;
   }
   const cell=(label,val,unit)=>{ const has=val!=null&&val!==''; return `<div class="text-center px-1"><p class="text-[10px] text-faint font-bold mb-1">${label}</p><p class="text-[14px] font-extrabold ${has?'text-ink':'text-faint'} leading-none">${has?val:'—'}${has?`<span class="text-[9px] text-faint font-bold">${unit}</span>`:''}</p></div>`; };
-  el.innerHTML=`<div class="grid grid-cols-4 divide-x divide-line">
+  el.innerHTML=`<button class="entry-edit pop w-full text-left" data-id="${meal.id}"><div class="grid grid-cols-4 divide-x divide-line">
     ${cell('摂取',meal.kcal,'kcal')}${cell('P',meal.protein,'g')}${cell('F',meal.fat,'g')}${cell('C',meal.carbs,'g')}
-  </div>`;
+  </div></button>`;
+}
+// compact tappable 本日の体重 handle in 予定 (edit/add). Weight lives on 記録; this is just the edit handle.
+function renderDayWeight(){
+  const el=document.getElementById('dayWeightRow'); if(!el) return;
+  const {m,d}=parseYmd(selectedDate);
+  const lbl = selectedDate===TODAY ? '本日の体重' : `${m+1}月${d}日の体重`;
+  const w=logEntries.find(e=>e.type==='weight'&&e.who===CURRENT_USER&&e.date===selectedDate);
+  el.innerHTML = w
+    ? `<button class="entry-edit pop w-full flex items-center justify-between rounded-2xl bg-card border border-line shadow-card px-4 py-2.5" data-id="${w.id}">
+         <span class="text-[12px] font-bold text-sub">⚖ ${lbl}</span>
+         <span class="text-[13px] font-extrabold text-ink">${w.kg}<span class="text-[10px] text-faint font-bold ml-0.5">kg</span> <span class="text-faint text-[11px] ml-0.5">✎</span></span>
+       </button>`
+    : `<button class="weight-add pop w-full flex items-center justify-center gap-1.5 text-[12px] font-bold text-accent bg-card border border-dashed border-aline rounded-2xl py-2.5">⚖ ＋ ${lbl}を記録</button>`;
 }
 
 // per-item privacy scopes (no-shame: private is just grey, never a warning)
@@ -900,6 +969,8 @@ document.addEventListener('click',e=>{
     renderLimits();
   }
   if(e.target.closest('.meal-add')) openSheet('meal');
+  const eedit=e.target.closest('.entry-edit'); if(eedit) openSheetEdit(eedit.dataset.id);
+  if(e.target.closest('#sheetDelete')) deleteEntry();
   if(e.target.closest('.rule-add')) openRule();
   if(e.target.closest('#ruleSave')) saveRule();
   if(e.target.closest('#ruleCancel')||e.target.closest('#ruleScrim')) closeRule();
