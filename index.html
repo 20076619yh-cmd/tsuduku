@@ -124,6 +124,8 @@
           <span class="text-[10px] font-bold text-faint">日</span>
         </div>
         <div id="monthGrid" class="grid grid-cols-7 gap-y-1"></div>
+        <!-- inline detail for the tapped day (no navigation) -->
+        <div id="monthDetail" class="hidden mt-3"></div>
       </div>
 
       <div class="flex items-center gap-4 rounded-2xl bg-card border border-line shadow-card p-4 mb-5">
@@ -570,6 +572,26 @@ function renderMonth(){
   }
   document.getElementById('monthGrid').innerHTML=cells;
 }
+// inline popup under the grid: who does what on the tapped day (no navigation)
+function renderMonthDetail(){
+  const el=document.getElementById('monthDetail'); if(!el) return;
+  const {m,d}=parseYmd(selectedDate);
+  const items=logEntries.filter(e=>e.type==='workout'&&e.date===selectedDate);
+  const head=`<p class="text-[12px] font-bold text-sub mb-2.5">${m+1}月${d}日(${WD[wdIndex(selectedDate)]})・誰が何をする</p>`;
+  const body = items.length
+    ? `<div class="space-y-2.5">`+items.map(e=>{
+        const mem=members[e.who]; const s=planStat[e.status]||planStat.planned;
+        return `<div class="flex items-center gap-2.5">
+          ${avatar(mem,28)}
+          <span class="text-[12px] font-bold text-ink w-12 shrink-0">${mem.name}</span>
+          ${chip(e.tag, e.status==='planned'?'':e.status)}
+          <span class="ml-auto flex items-center gap-1 text-[11px] font-bold ${s.cls}"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.check?'✓':''}${s.label}</span>
+        </div>`;
+      }).join('')+`</div>`
+    : `<p class="text-[11px] text-faint">この日の予定はまだありません</p>`;
+  el.innerHTML=`<div class="rounded-2xl bg-card border border-line shadow-card p-3.5">${head}${body}</div>`;
+  el.classList.remove('hidden');
+}
 
 /* ---------- bottom sheet (declare / log) ---------- */
 const SHEET_TAGS=['胸トレ','背中','脚','肩・腕','有酸素','ストレッチ','休養'];
@@ -829,7 +851,7 @@ document.addEventListener('click',e=>{
     document.querySelectorAll('.vseg').forEach(b=>{const on=b.dataset.vview===schedView;b.classList.toggle('active',on);b.classList.toggle('text-sub',!on);});
     document.getElementById('weekStrip').classList.toggle('hidden',schedView!=='week');
     document.getElementById('monthCal').classList.toggle('hidden',schedView!=='month');
-    if(schedView==='month') renderMonth();
+    if(schedView==='month'){ renderMonth(); renderMonthDetail(); }
   }
   const mnav=e.target.closest('[data-mnav]');
   if(mnav){
@@ -839,7 +861,7 @@ document.addEventListener('click',e=>{
     renderMonth();
   }
   const mcell=e.target.closest('.mcell');
-  if(mcell){ selectedDate=mcell.dataset.date; renderMonth(); renderDayList(); }
+  if(mcell){ selectedDate=mcell.dataset.date; renderMonth(); renderMonthDetail(); renderDayList(); }
 
   if(e.target.closest('.declare-btn')||e.target.closest('.day-add')) openSheet('workout');
   if(e.target.closest('.weight-add')) openSheet('weight');
