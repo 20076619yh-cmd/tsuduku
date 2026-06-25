@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* custom CSS moved verbatim from the prototype's <style> block */
+  html,body{ -webkit-font-smoothing:antialiased; }
+  body{ font-family:'Plus Jakarta Sans','Noto Sans JP',system-ui,sans-serif; background:#E9E8E3; }
+  .phone-scroll::-webkit-scrollbar,.nowrap-scroll::-webkit-scrollbar{ display:none; }
+  .phone-scroll,.nowrap-scroll{ -ms-overflow-style:none; scrollbar-width:none; }
+  .page{ display:none; animation:fade .28s ease; }
+  .page.active{ display:block; }
+  @keyframes fade{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  .nav-btn.active .nav-ico{ color:#14B87C; }
+  .nav-btn.active .nav-lbl{ color:#181D1A; font-weight:800; }
+  .pop{ transition:transform .12s ease; }
+  .pop:active{ transform:scale(.94); }
+  .react.reacted{ background:#E8F6EF !important; color:#14B87C !important; border-color:#CDEBDD !important; }
+  .seg-btn.active{ background:#181D1A; color:#fff; }
+  .vseg.active,.sf-type.active{ background:#181D1A; color:#fff; }
+  .sf-tag.sel,.start-tag.sel{ background:#14B87C; color:#fff; border-color:#14B87C; }
+  .sheet{ transform:translateY(110%); transition:transform .3s cubic-bezier(.4,0,.2,1); max-height:86%; overflow-y:auto; box-shadow:0 -8px 30px rgba(24,29,26,.12); }
+  .sheet.open{ transform:translateY(0); }
+  .sheet-scrim{ background:rgba(24,29,26,.35); }
+  @media (prefers-reduced-motion: reduce){ .page{animation:none;} .sheet{transition:none;} }
