@@ -1,6 +1,7 @@
-// fit tree — app entry (Phase 1: Vite). Logic unchanged from the single-HTML prototype.
+// fit tree — app entry. Logic unchanged from the prototype; Phase 2 adds a login gate.
 import './style.css';
 import Chart from 'chart.js/auto';   // auto = same all-controllers registration as the old UMD CDN
+import { supabase } from './supabase.js';
 
 /* ---------- members ---------- */
 // Flat initial state: just me. Friends arrive in the backend/sharing phase (I/I2).
@@ -838,7 +839,38 @@ document.addEventListener('click',e=>{
 document.addEventListener('input', e=>{ if(e.target.closest('#profileSheet')) updateProfilePreview(); });
 document.addEventListener('change', e=>{ if(e.target.id==='psPhoto') handlePhoto(e.target.files && e.target.files[0]); });
 
-/* ---------- init ---------- */
-renderFeedAvatars(); renderFeed(); renderWeek(); renderDayList(); renderGroup();
-renderMeal(); renderLimits(); renderMonth(); renderMaintCaption(); renderStartBar(); renderStats(); renderStreak();
-showPage('schedule');   // app opens on 予定 (also reveals the 運動開始 bar)
+/* ---------- init (runs once, after login) ---------- */
+let appStarted=false;
+function initApp(){
+  if(appStarted) return; appStarted=true;
+  renderFeedAvatars(); renderFeed(); renderWeek(); renderDayList(); renderGroup();
+  renderMeal(); renderLimits(); renderMonth(); renderMaintCaption(); renderStartBar(); renderStats(); renderStreak();
+  showPage('schedule');   // app opens on 予定 (also reveals the 運動開始 bar)
+}
+
+/* ---------- auth gate (Phase 2): Google login wraps the app, no data yet ---------- */
+function showApp(){
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  initApp();
+}
+function showLogin(){
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+}
+// resolve current session on load, then react to every login/logout
+supabase.auth.getSession().then(({data})=>{ data.session ? showApp() : showLogin(); });
+supabase.auth.onAuthStateChange((_event, session)=>{ session ? showApp() : showLogin(); });
+
+document.getElementById('googleLogin').addEventListener('click', async ()=>{
+  // redirectTo = current origin → works on both localhost and the Vercel URL
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider:'google',
+    options:{ redirectTo: window.location.origin },
+  });
+  if(error) console.error('Google login failed:', error.message);
+});
+document.getElementById('logoutBtn').addEventListener('click', async ()=>{
+  closeProfile();
+  await supabase.auth.signOut();   // onAuthStateChange → showLogin()
+});

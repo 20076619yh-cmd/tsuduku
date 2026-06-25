@@ -10,7 +10,27 @@
 </head>
 <body class="min-h-screen flex items-center justify-center p-0 sm:p-6">
 
-<div class="relative w-full max-w-[420px] h-[100dvh] sm:h-[860px] bg-bg sm:rounded-[42px] sm:shadow-[0_30px_80px_rgba(0,0,0,0.22)] sm:border-[9px] sm:border-[#15120f] overflow-hidden flex flex-col">
+<!-- login gate (shown until Supabase reports a session) -->
+<div id="loginScreen" class="relative w-full max-w-[420px] h-[100dvh] sm:h-[860px] bg-bg sm:rounded-[42px] sm:shadow-[0_30px_80px_rgba(0,0,0,0.22)] sm:border-[9px] sm:border-[#15120f] overflow-hidden flex flex-col items-center justify-center text-center px-9">
+  <div class="w-16 h-16 rounded-[20px] bg-ink flex items-center justify-center mb-6 shadow-card">
+    <span class="text-white text-[30px]">🌱</span>
+  </div>
+  <h1 class="text-[28px] font-extrabold text-ink tracking-tight mb-2">fit tree</h1>
+  <p class="text-[14px] text-sub font-bold">仲間と続ける、運動の絵日記</p>
+  <p class="text-[12px] text-faint mt-1 mb-10">ログインして、あなたの記録をはじめよう</p>
+  <button id="googleLogin" class="pop w-full max-w-[300px] flex items-center justify-center gap-3 bg-card border border-line shadow-card rounded-2xl py-3.5 text-[14px] font-bold text-ink">
+    <svg viewBox="0 0 18 18" class="w-[18px] h-[18px]" aria-hidden="true">
+      <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/>
+      <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/>
+      <path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z"/>
+      <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.9 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/>
+    </svg>
+    Googleでログイン
+  </button>
+  <p class="text-[11px] text-faint mt-6">続けることを、いちばん大切に。</p>
+</div>
+
+<div id="app" class="hidden relative w-full max-w-[420px] h-[100dvh] sm:h-[860px] bg-bg sm:rounded-[42px] sm:shadow-[0_30px_80px_rgba(0,0,0,0.22)] sm:border-[9px] sm:border-[#15120f] overflow-hidden flex flex-col">
 
   <!-- app bar -->
   <header class="shrink-0 px-5 pt-4 pb-3 bg-bg/92 backdrop-blur z-20 border-b border-line/60">
@@ -313,6 +333,7 @@
     </div>
     <p class="text-[10px] text-faint mb-3 leading-relaxed">※式は個人で±200〜400kcalずれ得る初期の目安。将来は体重×カロリー実データで補正予定。認証・保存は別フェーズ。</p>
     <button id="profileSave" class="pop w-full bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">保存</button>
+    <button id="logoutBtn" class="pop w-full mt-2 text-[13px] font-bold text-sub border border-line rounded-2xl py-3">ログアウト</button>
   </div>
 
   <!-- add self-rule sheet (mock) -->
