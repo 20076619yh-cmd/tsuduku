@@ -6,10 +6,13 @@
 ## バックエンド化フェーズ 進捗
 - [x] Phase 1: Vite化＋Vercel公開構成
 - [x] Phase 2: Supabase接続＋Googleログイン(認証ゲート) — push済み(9fddaab)
-- [ ] Phase 3a: スキーマ作成＋users/プロフィール永続化＋bootstrap/loadAll土台 ← **次回着手**
-  - **次回の最初**: SQL全文(CREATE TABLE×6＋RLS全ポリシー＋is_space_member)を再提示→ユーザー最終確認→Supabase SQL Editorで実行→アプリ配線。SQLは未実行。詳細・確定事項は CLAUDE.md「Phase 3a 確定事項」参照
-  - 確定修正: 食事はkcalのみ(P/F/C削除)／nick→表示名・頭文字連動(Array.from)／絵文字対応
-- [ ] Phase 3b: entries/rules/posts の保存配線＋保存→リロード復元の通し確認
+- [x] Phase 3a: スキーマ作成＋users/プロフィール永続化＋bootstrap/loadAll土台 — 完了
+  - 実装: src/db.js(bootstrap/loadAll/profileFromRow/saveProfileRow)＋main.js配線(initApp async化・CURRENT_USER/members let化・firstCP/renderIdentity・saveProfileでクラウド保存)＋index.htmlに #heroAvatar/#heroName
+  - スキーマ: 6テーブル(space_id込み)＋RLS＋is_space_member＋GRANT(authenticatedのみ)。usersに activity_coef/maintenance_override 追加でprofile3項目往復
+  - 学び: GRANTとRLSは別レイヤー(GRANT無いと42501)／spaces insertは読み返し不可でid=crypto.randomUUID()採番。詳細は CLAUDE.md「Phase 3a 完了」参照
+  - 通し確認済み: ログイン→3テーブル各1行自動作成／nick連動(絵文字OK)／プロフィール保存→リロード完全復元
+- [ ] Phase 3b: entries/rules/posts の保存配線＋保存→リロード復元の通し確認 ← **次回着手**
+  - 併せて: 食事P/F/C削除(confirmSheet meal書き込み＋入力UI)／dur は秒(dur_sec)で保存し表示側で整形／onAuthStateChange内awaitのデッドロック対策(setTimeout(0))を検討
 - [ ] Phase 4以降: spaces/space_members共有＋RLSテスト→スペース作成UI→リアルタイム(CLAUDE.md参照)
 
 ## 着手順

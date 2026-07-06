@@ -2,12 +2,16 @@
 import './style.css';
 import Chart from 'chart.js/auto';   // auto = same all-controllers registration as the old UMD CDN
 import { supabase } from './supabase.js';
+import { bootstrap, loadAll, profileFromRow, saveProfileRow } from './db.js';
 
 /* ---------- members ---------- */
 // Flat initial state: just me. Friends arrive in the backend/sharing phase (I/I2).
-const members = {
+// Re-keyed to the logged-in user's id in bootstrap (see initApp) so members[CURRENT_USER] resolves.
+let members = {
   boy:   { name:'ぼーい', ini:'ボ', c:'#14B87C' },
 };
+// First code point (not str[0]) so emoji / surrogate-pair nicknames don't get half-cut.
+function firstCP(s){ return (Array.from((s || '').trim())[0]) || '?'; }
 const tagDot = {
   '胸トレ':'#FF6A3D','背中':'#3E86C9','脚':'#7C6CD0',
   '肩・腕':'#E0A53A','有酸素':'#14B87C','ストレッチ':'#5FB6A8','休養':'#9AA09A'
@@ -209,7 +213,8 @@ function reactBtn(i,key,emo,n){
 }
 
 /* ---------- SCHEDULE (type-tagged log · week/month · bottom sheet) ---------- */
-const CURRENT_USER='boy';
+let CURRENT_USER='boy';   // replaced with session.user.id in bootstrap (initApp)
+let SPACE_ID=null;        // the personal space id resolved in bootstrap
 const TODAY='2026-06-20';
 let selectedDate=TODAY;
 let schedView='week';
@@ -746,10 +751,23 @@ function closeProfile(){
   document.getElementById('profileSheet').classList.remove('open');
   document.getElementById('profileScrim').classList.add('hidden');
 }
+// nick is the single source of truth for display name + avatar initial (header + 記録 hero).
+function renderIdentity(){
+  const m = members[CURRENT_USER]; if(!m) return;
+  const btn = document.getElementById('profileBtn'); if(btn) btn.textContent = m.ini;
+  const ha  = document.getElementById('heroAvatar'); if(ha) ha.textContent = m.ini;
+  const hn  = document.getElementById('heroName');   if(hn) hn.textContent = `${m.name}の今週`;
+}
 function saveProfile(){
   Object.assign(profile, readProfileForm());
   closeProfile();
   renderMaintCaption();
+  // reflect nick into identity + persist to cloud (fire-and-forget; log on failure)
+  const m = members[CURRENT_USER];
+  if(m){ m.name = profile.nick; m.ini = firstCP(profile.nick); }
+  renderIdentity();
+  saveProfileRow(CURRENT_USER, profile, maintenanceValue())
+    .catch(err => console.error('profile save failed:', err.message || err));
 }
 
 /* ---------- nav + interactions ---------- */
@@ -841,26 +859,40 @@ document.addEventListener('change', e=>{ if(e.target.id==='psPhoto') handlePhoto
 
 /* ---------- init (runs once, after login) ---------- */
 let appStarted=false;
-function initApp(){
+async function initApp(session){
   if(appStarted) return; appStarted=true;
+  try{
+    // users row + personal space, then load cloud data into the in-memory stores.
+    const { userId, spaceId, urow } = await bootstrap(session);
+    CURRENT_USER=userId; SPACE_ID=spaceId;
+    Object.assign(profile, profileFromRow(urow));
+    members = { [CURRENT_USER]: { name:profile.nick, ini:firstCP(profile.nick), c:'#14B87C' } };
+    const data = await loadAll(spaceId);
+    logEntries.push(...data.entries);
+    posts.push(...data.posts);
+    limits.push(...data.rules);
+  }catch(err){
+    console.error('bootstrap/load failed:', err.message || err);
+  }
   renderFeedAvatars(); renderFeed(); renderWeek(); renderDayList(); renderGroup();
   renderMeal(); renderLimits(); renderMonth(); renderMaintCaption(); renderStartBar(); renderStats(); renderStreak();
+  renderIdentity();
   showPage('schedule');   // app opens on 予定 (also reveals the 運動開始 bar)
 }
 
 /* ---------- auth gate (Phase 2): Google login wraps the app, no data yet ---------- */
-function showApp(){
+function showApp(session){
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
-  initApp();
+  initApp(session);
 }
 function showLogin(){
   document.getElementById('app').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
 }
 // resolve current session on load, then react to every login/logout
-supabase.auth.getSession().then(({data})=>{ data.session ? showApp() : showLogin(); });
-supabase.auth.onAuthStateChange((_event, session)=>{ session ? showApp() : showLogin(); });
+supabase.auth.getSession().then(({data})=>{ data.session ? showApp(data.session) : showLogin(); });
+supabase.auth.onAuthStateChange((_event, session)=>{ session ? showApp(session) : showLogin(); });
 
 document.getElementById('googleLogin').addEventListener('click', async ()=>{
   // redirectTo = current origin → works on both localhost and the Vercel URL

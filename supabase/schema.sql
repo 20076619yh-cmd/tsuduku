@@ -27,9 +27,14 @@ create table if not exists public.users (
   height_cm        numeric,                            -- 身長
   weight_kg        numeric,                            -- 生の体重  ← 本人のみ閲覧
   body_fat_pct     numeric,                            -- 生の体脂肪率 ← 本人のみ閲覧
-  maintenance_kcal integer,                            -- メンテナンスカロリー(算出+手動補正)
+  activity_coef    numeric,                            -- 活動係数(メンテ算出用)
+  maintenance_override integer,                        -- 手動補正値(null=自動算出を使う)
+  maintenance_kcal integer,                            -- 実効メンテカロリー(override or 算出値)
   created_at       timestamptz not null default now()
 );
+-- 既存DB向け冪等マイグレーション(既に users を作成済みの環境で列を追加)。
+alter table public.users add column if not exists activity_coef        numeric;
+alter table public.users add column if not exists maintenance_override integer;
 
 -- ---- spaces : 共有の箱(タイムライン/カレンダーの単位) ----------------------
 create table if not exists public.spaces (
@@ -229,6 +234,22 @@ create policy rules_update_owner on public.rules
 drop policy if exists rules_delete_owner on public.rules;
 create policy rules_delete_owner on public.rules
   for delete using (owner = auth.uid());
+
+-- =============================================================
+-- 5) GRANTS
+--    RLS は「行」の門番。GRANT は「テーブルそのもの」への到達許可。両方必要。
+--    (RLS を有効化しても、authenticated に GRANT が無いと 42501 permission denied)
+--    authenticated(ログイン済) にだけ付与。anon(未ログイン) には付与しない
+--    = ログインゲート＋プライバシー維持。GRANT は再実行しても無害(冪等)。
+-- =============================================================
+grant usage on schema public to authenticated;
+
+grant select, insert, update, delete on
+  public.users, public.spaces, public.space_members,
+  public.entries, public.posts, public.rules
+  to authenticated;
+
+grant execute on function public.is_space_member(uuid) to authenticated;
 
 -- =============================================================
 -- 完了。次は src/db.js + main.js/index.html の配線(Phase 3a アプリ側)。

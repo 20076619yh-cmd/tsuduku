@@ -90,13 +90,15 @@ Scheduleは「これからやること(do)＋これから守ること(commitment
 - Phase 6: リアルタイム同期
 - 注: テーブルはPhase1-2の段階から最初からspaces/space_id込みで作る(器を先に用意)。複数スペース切替が動くのはPhase 5
 
-### Phase 3a 確定事項（次回着手・計画確定済み）
-Phase 2(Googleログイン)まで完了・push済み(commit 9fddaab)。次は Phase 3a = 「ログイン→users行＋自分スペース自動作成→保存データをロードして描画／プロフィールはクラウド保存」までの土台。entries/rules/posts の書き込み配線は 3b。
-- **次回の最初の手順**: SQL本体(CREATE TABLE全6テーブル＋RLSポリシー全文＋is_space_member関数)を再提示 → ユーザーが内容を最終確認 → Supabase SQL Editorで実行 → その後アプリ側(src/db.js追加＋main.js/index.html配線)を適用。SQLはまだ未実行。
-- **スキーマ要点**: users/spaces/space_members/entries/posts/rules を最初からspace_id込みで作成。RLSは「同スペースのメンバーだけread・owner本人だけwrite」、usersの生体重/体脂肪は本人のみ。space_members参照は無限再帰回避のためSECURITY DEFINERの is_space_member() 経由。
+### Phase 3a 完了（実装済み・次は 3b）
+Phase 3a 完了・push済み。「ログイン→users行＋自分スペース自動作成→保存データをロードして描画／プロフィールはクラウド保存」までの土台が動作。entries/rules/posts の書き込み配線は 3b。
+- **実装**: `src/db.js`(データ層: bootstrap/loadAll/profileFromRow/saveProfileRow) 追加。main.js は initApp を async化(bootstrap→CURRENT_USER/members/profile→loadAll→render→renderIdentity)、CURRENT_USER/members を let化、firstCP()+renderIdentity() 追加、saveProfile でクラウド保存。index.html にヒーロー用 `#heroAvatar`/`#heroName` id 付与。
+- **スキーマ要点**: users/spaces/space_members/entries/posts/rules を最初からspace_id込みで作成。RLSは「同スペースのメンバーだけread・owner本人だけwrite」、usersの生体重/体脂肪は本人のみ。space_members参照は無限再帰回避のためSECURITY DEFINERの is_space_member() 経由。プロフィール往復用に users へ `activity_coef`/`maintenance_override` 列を追加(冪等ALTERも同梱)。
+- **重要な学び(schema.sql に反映済み)**: (1) **GRANT と RLS は別レイヤー**。RLSを有効化しても `authenticated` にテーブルGRANTが無いと 42501 permission denied で読み書き不可。schema.sql 末尾で `authenticated` にのみ GRANT(anonには一切付与しない=ログインゲート＋プライバシー)。(2) **spaces のinsertで `.select()` 読み返し不可**: membership作成前は is_space_member=false で0行→PGRST116。space idを `crypto.randomUUID()` でクライアント採番し読み返しを廃止(users insertの読み返しは users_select_self でOK)。
+- **onAuthStateChange 注意(未修正・要監視)**: 現状は getSession/onAuthStateChange 双方から showApp→initApp。将来 3b で書き込み等を足す際、onAuthStateChangeコールバック内で直に await supabase.from(...) するとGoTrueロックでデッドロックし得る(setTimeout(0)で外に出す)。今回は 42501 が主因だったため未対応。
 - **確定した3つの修正**:
-  1. 食事は摂取kcalのみ。entriesから protein/fat/carbs を持たない＋食事入力UIからもP/F/C欄を削除(毎食の細かい入力は重い。将来パッチで写真判定など再検討)
-  2. ニックネーム(nick)を表示名・アバター頭文字の唯一の真実に連動。先頭文字は Array.from() でコードポイント単位抽出(str[0]だと絵文字/サロゲートで半欠けするため)。renderIdentity()でヘッダ/記録ヒーローのアバター・名前を更新。初回nick既定値はGoogleプロフィール名。
-  3. 絵文字対応(ニックネーム等で絵文字が使える。text列＝UTF-8で保存、頭文字抽出もArray.fromで対応)
+  1. 【3bで実施】食事は摂取kcalのみ。entriesから protein/fat/carbs を持たない＋食事入力UIからもP/F/C欄を削除(毎食の細かい入力は重い。将来パッチで写真判定など再検討)。※スキーマ側は既にkcalのみ。残るは confirmSheet の meal 書き込みと入力UIのP/F/C欄削除(entries書き込み配線と同時)
+  2. 【3a済】ニックネーム(nick)を表示名・アバター頭文字の唯一の真実に連動。先頭文字は Array.from() でコードポイント単位抽出(str[0]だと絵文字/サロゲートで半欠けするため)。renderIdentity()でヘッダ/記録ヒーローのアバター・名前を更新。初回nick既定値はGoogleプロフィール名。
+  3. 【3a済】絵文字対応(ニックネーム等で絵文字が使える。text列＝UTF-8で保存、頭文字抽出もArray.fromで対応)
 - **後回し(合意済み)**: 写真の永続化=Phase 5(Storage)・リアクション永続化=後回し・日付モデル(TODAY/週ストリップのハードコード)=現状維持。実装は 3a→3b の2コミットに分割。
 - **id方針**: entries/posts/rules のidは crypto.randomUUID() でクライアント生成しDBと同一に(挿入時の付け替え不要)。CURRENT_USERはログイン時に session.user.id を代入(let化)。
