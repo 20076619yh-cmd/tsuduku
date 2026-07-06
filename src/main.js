@@ -2,7 +2,7 @@
 import './style.css';
 import Chart from 'chart.js/auto';   // auto = same all-controllers registration as the old UMD CDN
 import { supabase } from './supabase.js';
-import { bootstrap, loadAll, profileFromRow, saveProfileRow } from './db.js';
+import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry } from './db.js';
 
 /* ---------- members ---------- */
 // Flat initial state: just me. Friends arrive in the backend/sharing phase (I/I2).
@@ -12,9 +12,11 @@ let members = {
 };
 // First code point (not str[0]) so emoji / surrogate-pair nicknames don't get half-cut.
 function firstCP(s){ return (Array.from((s || '').trim())[0]) || '?'; }
+// 部位色: 肩腕を「肩(amber)」「腕(bronze)」に分割。近い暖色だが区別可。既存パレットと調和。
+// 未登録タグ(＋その他の自由テキスト)は tagDot[t]||'#9AA09A' でニュートラル灰に自動フォールバック。
 const tagDot = {
   '胸トレ':'#FF6A3D','背中':'#3E86C9','脚':'#7C6CD0',
-  '肩・腕':'#E0A53A','有酸素':'#14B87C','ストレッチ':'#5FB6A8','休養':'#9AA09A'
+  '肩':'#E0A53A','腕':'#B5836A','有酸素':'#14B87C','ストレッチ':'#5FB6A8','休養':'#9AA09A'
 };
 function avatar(m,size=40){
   return `<div style="width:${size}px;height:${size}px;background:${m.c}" class="rounded-full flex items-center justify-center text-white font-bold shrink-0"><span style="font-size:${Math.round(size*0.4)}px">${m.ini}</span></div>`;
@@ -49,7 +51,7 @@ let timerRunning=false, timerSec=0, timerInterval=null, timerTags=[];
 let timerFromPlan=false;    // true=今日の予定から開始（既存エントリを更新）／false=予定なし開始（新規追加）
 let startTags=[];           // category-select (no-plan start)
 let pendingPhoto=null, postCtx=null;
-const START_CATS=['胸トレ','背中','脚','肩・腕','有酸素','ストレッチ'];
+const START_CATS=['胸トレ','背中','脚','肩','腕','有酸素','ストレッチ'];
 function fmtTimer(s){ return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
 function durFromSec(s){ const min=Math.max(1,Math.round(s/60)); if(min<60) return `${min}分`; const h=Math.floor(min/60), mm=min%60; return mm?`${h}時間${mm}分`:`${h}時間`; }
 function renderStartBar(){
@@ -76,23 +78,28 @@ function onStartWorkout(){
 }
 function closeStartSheet(){ document.getElementById('startSheet').classList.remove('open'); document.getElementById('startScrim').classList.add('hidden'); }
 function renderStartTags(){
-  document.getElementById('startTags').innerHTML=START_CATS.map(t=>
+  // fixed cats + any user-added free-text tags (＋その他), then the add button
+  const list=[...START_CATS, ...startTags.filter(t=>!START_CATS.includes(t))];
+  document.getElementById('startTags').innerHTML=list.map(t=>
     `<button class="start-tag pop text-[12px] font-bold px-3 py-2 rounded-full border ${startTags.includes(t)?'sel':'border-line text-ink bg-card'}" data-tag="${t}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style="background:${tagDot[t]||'#9AA09A'}"></span>${t}</button>`
-  ).join('');
+  ).join('')
+    + `<button class="start-tag-other pop text-[12px] font-bold px-3 py-2 rounded-full border border-dashed border-line text-sub bg-card">＋その他</button>`;
 }
 function onStartGo(){ if(!startTags.length) return; timerFromPlan=false; closeStartSheet(); startTimer(startTags); }
 function onStopWorkout(){
   if(timerInterval) clearInterval(timerInterval);
   timerRunning=false;
+  const durSec=timerSec;
   const dur=durFromSec(timerSec);
   renderStartBar();
   // (1) record the workout so it counts. 予定から開始なら今日の自分の予定を実施済みに更新（重複追加しない）。
-  //     予定なし開始の時だけ新規エントリを追加する。
+  //     予定なし開始の時だけ新規エントリを追加する。dur_sec を保存し表示は durFromSec 整形。
   const todays=logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&e.date===TODAY);
   if(timerFromPlan && todays.length){
-    todays.forEach(e=>{ e.status='done'; e.dur=dur; });
+    todays.forEach(e=>{ e.status='done'; e.dur=dur; e.durSec=durSec; upsertEntry(e); });
   }else{
-    logEntries.push({id:newId(), date:TODAY, type:'workout', who:CURRENT_USER, tags:timerTags.slice(), time:'いま', dur, status:'done'});
+    const en={id:newId(), date:TODAY, type:'workout', who:CURRENT_USER, tags:timerTags.slice(), time:'いま', dur, durSec, status:'done'};
+    logEntries.push(en); upsertEntry(en);
   }
   rerenderAfterChange();
   // (2) open the share (post) flow with the same tags + measured time
@@ -266,7 +273,7 @@ const logEntries = [];
 // stable ids so any entry (workout/weight/meal) can be edited or deleted by reference
 let entrySeq=0;
 logEntries.forEach(e=>{ e.id='e'+(entrySeq++); });
-function newId(){ return 'e'+(entrySeq++); }
+function newId(){ return crypto.randomUUID(); }   // client-gen id = same id in DB (no re-map)
 const planStat = {
   done:   {label:'実施済み', cls:'text-accent',    dot:'#14B87C', dim:false, check:true},
   planned:{label:'これから', cls:'text-ink',       dot:'#E0A53A', dim:false, check:false},
@@ -291,15 +298,38 @@ function workoutCard(p){
     </div>
   </div>`;
 }
+// compact tappable rows for weight / meal in the selected-day list (非TODAY用)。
+// entry-edit + data-id → 既存の編集シート(上書き/削除)を開く。
+function weightRow(w){
+  return `<div class="entry-edit pop cursor-pointer flex items-center justify-between rounded-2xl bg-card border border-line shadow-card px-4 py-2.5" data-id="${w.id}">
+    <span class="text-[12px] font-bold text-sub">⚖ 体重</span>
+    <span class="text-[13px] font-extrabold text-ink">${w.kg}<span class="text-[10px] text-faint font-bold ml-0.5">kg</span> <span class="text-faint text-[11px] ml-0.5">✎</span></span>
+  </div>`;
+}
+function mealRow(m){
+  return `<div class="entry-edit pop cursor-pointer flex items-center justify-between rounded-2xl bg-card border border-line shadow-card px-4 py-2.5" data-id="${m.id}">
+    <span class="text-[12px] font-bold text-sub">🍽 摂取</span>
+    <span class="text-[13px] font-extrabold text-ink">${m.kcal}<span class="text-[10px] text-faint font-bold ml-0.5">kcal</span> <span class="text-faint text-[11px] ml-0.5">✎</span></span>
+  </div>`;
+}
 function renderDayList(){
   document.getElementById('dayListLabel').textContent = fmtLabel(selectedDate);
   const items = logEntries.filter(e=>e.type==='workout'&&e.date===selectedDate);
-  document.getElementById('planList').innerHTML = items.length
-    ? items.map(workoutCard).join('')
+  // TODAY は体重/食事を専用カードが担当。非TODAY(過去/未来)はこのリストに出す。
+  const weight = logEntries.find(e=>e.type==='weight'&&e.who===CURRENT_USER&&e.date===selectedDate);
+  const meal   = logEntries.find(e=>e.type==='meal'  &&e.who===CURRENT_USER&&e.date===selectedDate);
+  const extra  = selectedDate!==TODAY ? [weight, meal].filter(Boolean) : [];
+  const rows = items.map(workoutCard).join('')
+    + extra.map(e=> e.type==='weight' ? weightRow(e) : mealRow(e)).join('');
+  const empty = selectedDate<TODAY
+    ? `<div class="text-center py-7 rounded-2xl bg-card border border-dashed border-line">
+         <p class="text-[12px] text-faint font-bold">この日の記録はありません</p>
+       </div>`
     : `<div class="text-center py-7 rounded-2xl bg-card border border-dashed border-line">
          <p class="text-[12px] text-faint font-bold">まだ予定がありません</p>
          <p class="text-[11px] text-faint mt-1">「＋追記」で宣言できます</p>
        </div>`;
+  document.getElementById('planList').innerHTML = (items.length || extra.length) ? rows : empty;
   if(typeof renderMeal==='function') renderMeal();
   if(typeof renderDayWeight==='function') renderDayWeight();
 }
@@ -356,7 +386,7 @@ function renderMonthDetail(){
       <span class="ml-auto text-[13px] font-extrabold text-ink">${weight.kg}<span class="text-[10px] text-faint font-bold ml-0.5">kg</span></span></div>`);
     if(meal) rows.push(`<div class="entry-edit pop cursor-pointer flex items-center gap-2.5" data-id="${meal.id}">
       <span class="text-[13px] shrink-0">🍽</span><span class="text-[12px] font-bold text-sub">摂取</span>
-      <span class="ml-auto text-[13px] font-extrabold text-ink">${meal.kcal}<span class="text-[10px] text-faint font-bold ml-0.5">kcal</span>${meal.protein!=null?` <span class="text-[11px] text-faint font-bold">P${meal.protein}g</span>`:''}</span></div>`);
+      <span class="ml-auto text-[13px] font-extrabold text-ink">${meal.kcal}<span class="text-[10px] text-faint font-bold ml-0.5">kcal</span></span></div>`);
     body = rows.length ? `<div class="space-y-2.5">${rows.join('')}</div>` : `<p class="text-[11px] text-faint">この日の記録はありません</p>`;
   }else{
     // today / future = plan ("誰が何をする")
@@ -378,7 +408,7 @@ function renderMonthDetail(){
 }
 
 /* ---------- bottom sheet (declare / log) ---------- */
-const SHEET_TAGS=['胸トレ','背中','脚','肩・腕','有酸素','ストレッチ','休養'];
+const SHEET_TAGS=['胸トレ','背中','脚','肩','腕','有酸素','ストレッチ','休養'];
 let sfType='workout', sfTags=['背中'], sfEditId=null;
 function sheetTitle(){
   const ed=sfEditId!=null;
@@ -397,21 +427,24 @@ function setSheetType(t){
   document.getElementById('sheetTitle').textContent=sheetTitle();
 }
 function renderSheetTags(){
-  document.getElementById('sfTags').innerHTML=SHEET_TAGS.map(t=>
+  // fixed 部位 + any user-added free-text tags (＋その他), then the add button
+  const list=[...SHEET_TAGS, ...sfTags.filter(t=>!SHEET_TAGS.includes(t))];
+  document.getElementById('sfTags').innerHTML=list.map(t=>
     `<button class="sf-tag pop text-[11px] font-bold px-3 py-1.5 rounded-full border ${sfTags.includes(t)?'sel':'border-line text-ink bg-card'}" data-tag="${t}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style="background:${tagDot[t]||'#9AA09A'}"></span>${t}</button>`
-  ).join('');
+  ).join('')
+    + `<button class="sf-tag-other pop text-[11px] font-bold px-3 py-1.5 rounded-full border border-dashed border-line text-sub bg-card">＋その他</button>`;
 }
 function showSheet(){
   document.getElementById('sheetScrim').classList.remove('hidden');
   document.getElementById('sheet').classList.add('open');
 }
-function openSheet(type){
+function openSheet(type, date){
   sfEditId=null; sfTags=['背中'];
-  ['sfTime','sfKg','sfKcal','sfProtein','sfFat','sfCarbs'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+  ['sfTime','sfKg','sfKcal'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
   document.getElementById('sfTypeToggle').classList.remove('hidden');
   document.getElementById('sheetDelete').classList.add('hidden');
   setSheetType(type||'workout');
-  document.getElementById('sfDate').value=selectedDate;
+  document.getElementById('sfDate').value=date||selectedDate;   // 本日カードからは TODAY を渡す
   renderSheetTags();
   showSheet();
 }
@@ -424,7 +457,7 @@ function openSheetEdit(id){
   document.getElementById('sfDate').value=en.date;
   if(en.type==='workout'){ sfTags=(en.tags||[]).slice(); renderSheetTags(); document.getElementById('sfTime').value=(en.time&&en.time!=='—')?en.time:''; }
   else if(en.type==='weight'){ document.getElementById('sfKg').value=en.kg; }
-  else { document.getElementById('sfKcal').value=en.kcal; document.getElementById('sfProtein').value=en.protein??''; document.getElementById('sfFat').value=en.fat??''; document.getElementById('sfCarbs').value=en.carbs??''; }
+  else { document.getElementById('sfKcal').value=en.kcal; }   // 食事は摂取kcalのみ(P/F/C廃止)
   showSheet();
 }
 function closeSheet(){
@@ -441,41 +474,43 @@ function confirmSheet(){
   const date=document.getElementById('sfDate').value||selectedDate;
   const editing=sfEditId!=null;
   const target=editing?logEntries.find(e=>e.id===sfEditId):null;
+  let saved=null;   // the entry to persist (edit=overwrite by id, new=append)
   if(sfType==='workout'){
     if(!sfTags.length){ closeSheet(); return; }
     const status=editing&&target?target.status:(date<TODAY?'done':'planned');
     const fields={date, tags:sfTags.slice(), time:document.getElementById('sfTime').value||'—', status};
-    if(editing&&target) Object.assign(target,fields);
-    else logEntries.push({id:newId(), type:'workout', who:CURRENT_USER, ...fields});
+    if(editing&&target){ Object.assign(target,fields); saved=target; }
+    else{ saved={id:newId(), type:'workout', who:CURRENT_USER, ...fields}; logEntries.push(saved); }
   }else if(sfType==='weight'){
     const kg=parseFloat(document.getElementById('sfKg').value);
     if(!isNaN(kg)){
-      if(editing&&target) Object.assign(target,{date,kg});
+      if(editing&&target){ Object.assign(target,{date,kg}); saved=target; }
       else{
         const ex=logEntries.find(e=>e.type==='weight'&&e.who===CURRENT_USER&&e.date===date);
-        if(ex) ex.kg=kg; else logEntries.push({id:newId(),date,type:'weight',who:CURRENT_USER,kg});
+        if(ex){ ex.kg=kg; saved=ex; } else { saved={id:newId(),date,type:'weight',who:CURRENT_USER,kg}; logEntries.push(saved); }
       }
     }
-  }else{ // meal
+  }else{ // meal — 摂取kcalのみ(P/F/C廃止)
     const kcal=parseInt(document.getElementById('sfKcal').value);
     if(!isNaN(kcal)){
-      const num=id=>{const v=parseFloat(document.getElementById(id).value); return isNaN(v)?null:v;};
-      const fields={date,kcal,protein:num('sfProtein'),fat:num('sfFat'),carbs:num('sfCarbs')};
-      if(editing&&target) Object.assign(target,fields);
+      const fields={date,kcal};
+      if(editing&&target){ Object.assign(target,fields); saved=target; }
       else{
         const ex=logEntries.find(e=>e.type==='meal'&&e.who===CURRENT_USER&&e.date===date);
-        if(ex) Object.assign(ex,fields); else logEntries.push({id:newId(),type:'meal',who:CURRENT_USER,...fields});
+        if(ex){ Object.assign(ex,fields); saved=ex; } else { saved={id:newId(),type:'meal',who:CURRENT_USER,...fields}; logEntries.push(saved); }
       }
     }
   }
+  if(saved) upsertEntry(saved);   // ローカル反映後、裏でDB保存(失敗はconsole.error)
   selectedDate=date;
   closeSheet();
   rerenderAfterChange();
 }
 function deleteEntry(){
   if(sfEditId==null) return;
-  const i=logEntries.findIndex(e=>e.id===sfEditId);
-  if(i>=0) logEntries.splice(i,1);
+  const id=sfEditId;
+  const i=logEntries.findIndex(e=>e.id===id);
+  if(i>=0){ logEntries.splice(i,1); removeEntry(id); }
   closeSheet();
   rerenderAfterChange();
 }
@@ -484,25 +519,30 @@ function deleteEntry(){
 // meal input lives in 予定; intake feeds the 記録 calorie-balance graph (週). 食品DB検索なし
 function renderMeal(){
   const el=document.getElementById('mealSummary'); if(!el) return;
-  const {m,d}=parseYmd(selectedDate);
-  const lbl=document.getElementById('mealLabel');
-  if(lbl) lbl.textContent = selectedDate===TODAY ? '本日の食事' : `${m+1}月${d}日の食事`;
-  const meal=logEntries.find(e=>e.type==='meal'&&e.who===CURRENT_USER&&e.date===selectedDate);
+  const card=document.getElementById('mealCard');
+  // 本日カードは選択日=TODAYのときだけ表示。過去/未来日を選んでいる間はカードごと非表示
+  // (その日の食事は選択日リストの mealRow で見る/直す)。
+  if(selectedDate!==TODAY){ if(card) card.classList.add('hidden'); return; }
+  if(card) card.classList.remove('hidden');
+  const meal=logEntries.find(e=>e.type==='meal'&&e.who===CURRENT_USER&&e.date===TODAY);
   if(!meal){
-    el.innerHTML=`<button class="meal-add pop w-full flex items-center justify-center gap-1.5 text-[12px] font-bold text-accent bg-card border border-dashed border-aline rounded-2xl py-3">＋ 食事を入力（摂取kcal・タンパク質 など）</button>`;
+    el.innerHTML=`<button class="meal-add pop w-full flex items-center justify-center gap-1.5 text-[12px] font-bold text-accent bg-card border border-dashed border-aline rounded-2xl py-3">＋ 食事を入力（摂取kcal）</button>`;
     return;
   }
-  const cell=(label,val,unit)=>{ const has=val!=null&&val!==''; return `<div class="text-center px-1"><p class="text-[10px] text-faint font-bold mb-1">${label}</p><p class="text-[14px] font-extrabold ${has?'text-ink':'text-faint'} leading-none">${has?val:'—'}${has?`<span class="text-[9px] text-faint font-bold">${unit}</span>`:''}</p></div>`; };
-  el.innerHTML=`<button class="entry-edit pop w-full text-left" data-id="${meal.id}"><div class="grid grid-cols-4 divide-x divide-line">
-    ${cell('摂取',meal.kcal,'kcal')}${cell('P',meal.protein,'g')}${cell('F',meal.fat,'g')}${cell('C',meal.carbs,'g')}
+  el.innerHTML=`<button class="entry-edit pop w-full text-left" data-id="${meal.id}"><div class="flex items-baseline px-1">
+    <p class="text-[11px] text-faint font-bold">摂取</p>
+    <p class="text-[16px] font-extrabold text-ink leading-none ml-auto">${meal.kcal}<span class="text-[10px] text-faint font-bold ml-0.5">kcal</span></p>
   </div></button>`;
 }
 // compact tappable 本日の体重 handle in 予定 (edit/add). Weight lives on 記録; this is just the edit handle.
 function renderDayWeight(){
   const el=document.getElementById('dayWeightRow'); if(!el) return;
-  const {m,d}=parseYmd(selectedDate);
-  const lbl = selectedDate===TODAY ? '本日の体重' : `${m+1}月${d}日の体重`;
-  const w=logEntries.find(e=>e.type==='weight'&&e.who===CURRENT_USER&&e.date===selectedDate);
+  // 本日カードは選択日=TODAYのときだけ表示。過去/未来日を選んでいる間は非表示
+  // (その日の体重は選択日リストの weightRow で見る/直す)。
+  if(selectedDate!==TODAY){ el.innerHTML=''; el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  const lbl='本日の体重';
+  const w=logEntries.find(e=>e.type==='weight'&&e.who===CURRENT_USER&&e.date===TODAY);
   el.innerHTML = w
     ? `<button class="entry-edit pop w-full flex items-center justify-between rounded-2xl bg-card border border-line shadow-card px-4 py-2.5" data-id="${w.id}">
          <span class="text-[12px] font-bold text-sub">⚖ ${lbl}</span>
@@ -605,7 +645,8 @@ function weekBalSeries(){
   return week.map(w=>{ const meal=logEntries.find(e=>e.type==='meal'&&e.who===CURRENT_USER&&e.date===w.date); return meal?Math.round(meal.kcal-maint):null; });
 }
 function balSeries(mode){ return mode==='week'?weekBalSeries():new Array(8).fill(null); }
-function weekWorkoutDays(){ return new Set(logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&week.some(w=>w.date===e.date)).map(e=>e.date)).size; }
+// 実績=status:'done' のみ。予定(planned)を運動日数に混ぜない。
+function weekWorkoutDays(){ return new Set(logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&e.status==='done'&&week.some(w=>w.date===e.date)).map(e=>e.date)).size; }
 function daysSeries(){ return [0,0,0,0,0,0,0, weekWorkoutDays()]; }   // only current week known after reset
 function seriesDelta(arr){ const v=arr.filter(x=>x!=null); if(v.length<2) return ''; const diff=+(v[v.length-1]-v[0]).toFixed(1); return (diff<=0?'▼':'▲')+Math.abs(diff)+'kg'; }
 function initCharts(){
@@ -689,17 +730,18 @@ function fmtMinHtml(m){
 }
 function renderProgressHero(){
   const wk=logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&week.some(w=>w.date===e.date));
+  const doneWk=wk.filter(e=>e.status==='done');   // 実績は done のみ
   const set=(id,v)=>{const el=document.getElementById(id); if(el) el.textContent=v;};
-  set('statDays', new Set(wk.map(e=>e.date)).size);
+  set('statDays', new Set(doneWk.map(e=>e.date)).size);   // 運動日数=実施済みのみ(予定は数えない)
   set('heroStreak', streak);
-  const total=wk.length, done=wk.filter(e=>e.status==='done').length;
+  const total=wk.length, done=doneWk.length;   // ring=予定達成率(planned含むtotal), done=実施済み
   const pct = total ? Math.round(done/total*100) : 0;
   const ring=document.getElementById('heroRing'); if(ring) ring.setAttribute('stroke-dashoffset', (94.2*(1-pct/100)).toFixed(1));
   set('heroPct', pct); set('heroCount', `${done}/${total}回`);
   const weights=logEntries.filter(e=>e.type==='weight'&&e.who===CURRENT_USER).slice().sort((a,b)=> a.date<b.date?-1:1);
   set('heroWeight', weights.length?weights[weights.length-1].kg:'—');
   set('heroWeightDelta', weights.length?seriesDelta(weights.map(w=>w.kg)):'');
-  const ht=document.getElementById('heroTime'); if(ht) ht.innerHTML=fmtMinHtml(wk.reduce((s,e)=>s+durToMin(e.dur),0));
+  const ht=document.getElementById('heroTime'); if(ht) ht.innerHTML=fmtMinHtml(doneWk.reduce((s,e)=>s+durToMin(e.dur),0));
   const bser=weekBalSeries().filter(x=>x!=null);
   if(bser.length){ const sum=bser.reduce((a,b)=>a+b,0); set('heroMaint', (sum<=0?'-':'+')+Math.abs(sum/1000).toFixed(1)+'k'); }
   else set('heroMaint','—');
@@ -800,7 +842,7 @@ document.addEventListener('click',e=>{
   if(rpub){ const li=rpub.closest('.limit'); if(li){ limits[+li.dataset.i].pub=!limits[+li.dataset.i].pub; renderLimits(); } }
   const rdone=e.target.closest('.rule-done');
   if(rdone){ const li=rdone.closest('.limit'); if(li) recordRuleAchieve(+li.dataset.i); }
-  if(e.target.closest('.meal-add')) openSheet('meal');
+  if(e.target.closest('.meal-add')) openSheet('meal', TODAY);   // 本日の食事カード → TODAY固定
   const eedit=e.target.closest('.entry-edit'); if(eedit) openSheetEdit(eedit.dataset.id);
   if(e.target.closest('#sheetDelete')) deleteEntry();
   if(e.target.closest('.rule-add')) openRule();
@@ -816,6 +858,7 @@ document.addEventListener('click',e=>{
   if(e.target.closest('.stop-workout')) onStopWorkout();
   const sct=e.target.closest('.start-tag');
   if(sct){ const t=sct.dataset.tag; const i=startTags.indexOf(t); if(i>=0) startTags.splice(i,1); else startTags.push(t); renderStartTags(); }
+  if(e.target.closest('.start-tag-other')){ const t=(prompt('部位・メニュー名を入力')||'').trim(); if(t && !startTags.includes(t)) startTags.push(t); renderStartTags(); }
   if(e.target.closest('#startGo')) onStartGo();
   if(e.target.closest('#startCancel')||e.target.closest('#startScrim')) closeStartSheet();
   if(e.target.closest('#postSubmit')) submitPost();
@@ -842,10 +885,11 @@ document.addEventListener('click',e=>{
   if(mcell){ selectedDate=mcell.dataset.date; renderMonth(); renderMonthDetail(); renderDayList(); }
 
   if(e.target.closest('.declare-btn')||e.target.closest('.day-add')) openSheet('workout');
-  if(e.target.closest('.weight-add')) openSheet('weight');
+  if(e.target.closest('.weight-add')) openSheet('weight', TODAY);   // 本日の体重カード → TODAY固定
   const sft=e.target.closest('.sf-type'); if(sft) setSheetType(sft.dataset.sftype);
   const stag=e.target.closest('.sf-tag');
   if(stag){ const t=stag.dataset.tag; const i=sfTags.indexOf(t); if(i>=0) sfTags.splice(i,1); else sfTags.push(t); renderSheetTags(); }
+  if(e.target.closest('.sf-tag-other')){ const t=(prompt('部位・メニュー名を入力')||'').trim(); if(t && !sfTags.includes(t)) sfTags.push(t); renderSheetTags(); }
   if(e.target.closest('#sheetConfirm')) confirmSheet();
   if(e.target.closest('#sheetCancel')||e.target.closest('#sheetScrim')) closeSheet();
 

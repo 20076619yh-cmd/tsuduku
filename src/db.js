@@ -1,8 +1,19 @@
-// Phase 3a data layer. All Supabase data access lives here (isolated from UI logic).
-// Scope 3a: bootstrap (users row + personal space) + READ (loadAll) + profile cloud save.
-// entries/posts/rules WRITE wiring (insert/update/delete) is Phase 3b — loadAll only READs
-// them here, which proves the read/mapping path even while the tables are empty.
+// Supabase data layer. All Supabase data access lives here (isolated from UI logic).
+// Phase 3a: bootstrap (users row + personal space) + READ (loadAll) + profile cloud save.
+// Phase 3b: WRITE wiring (upsert/remove). 3b-1 = entries; posts/rules land in 3b-2.
 import { supabase } from './supabase.js';
+
+// owner + space resolved once in bootstrap, reused by the write helpers so call sites
+// in main.js stay terse (single space / single user through Phase 3).
+let _uid = null, _spaceId = null;
+// seconds → display label (mirrors main.js durFromSec so the data layer is self-contained)
+function durLabel(sec){
+  if(sec == null) return null;
+  const min = Math.max(1, Math.round(sec / 60));
+  if(min < 60) return `${min}分`;
+  const h = Math.floor(min / 60), mm = min % 60;
+  return mm ? `${h}時間${mm}分` : `${h}時間`;
+}
 
 // Ensure the self users row and a personal space exist; return ids + the users row.
 // RLS lets each insert through because id/created_by/user_id all equal auth.uid().
@@ -41,6 +52,7 @@ export async function bootstrap(session){
     if(mem.error) throw mem.error;
   }
 
+  _uid = uid; _spaceId = spaceId;    // stash for the write helpers
   return { userId: uid, spaceId, urow };
 }
 
@@ -90,9 +102,11 @@ export async function loadAll(spaceId){
 }
 
 // DB (snake_case) → in-memory shapes used across main.js.
+// dur_sec is the source of truth; keep both durSec (persist) and dur (display label).
 function mapEntry(x){
   return { id:x.id, who:x.owner, type:x.type, date:x.entry_date,
-    tags:x.tags || [], time:x.time_label, dur:x.dur_sec, status:x.status, kg:x.kg, kcal:x.kcal };
+    tags:x.tags || [], time:x.time_label, durSec:x.dur_sec, dur:durLabel(x.dur_sec),
+    status:x.status, kg:x.kg, kcal:x.kcal };
 }
 function mapPost(x){
   return { id:x.id, who:x.owner, kind:x.kind, tags:x.tags || [], dur:x.dur_sec,
@@ -101,4 +115,26 @@ function mapPost(x){
 }
 function mapRule(x){
   return { id:x.id, type:'limit', emoji:x.emoji, label:x.label, total:x.total, done:x.done, pub:x.pub };
+}
+
+// ---- WRITE (Phase 3b) : fire-and-forget. Local update + render happen first in main.js;
+//      these run in the background and only console.error on failure (no throw). ----
+// in-memory entry → DB row. owner/space_id auto-filled from bootstrap context.
+function entryToRow(e){
+  return {
+    id: e.id, owner: _uid, space_id: _spaceId,
+    type: e.type, entry_date: e.date,
+    tags: e.tags || [], time_label: e.time ?? null,
+    dur_sec: e.durSec ?? null, status: e.status ?? null,
+    kg: e.kg ?? null, kcal: e.kcal ?? null,
+  };
+}
+// upsert = insert-or-overwrite by PK id → editing a row never double-inserts.
+export async function upsertEntry(e){
+  const { error } = await supabase.from('entries').upsert(entryToRow(e));
+  if(error) console.error('upsertEntry failed:', error.message || error);
+}
+export async function removeEntry(id){
+  const { error } = await supabase.from('entries').delete().eq('id', id);
+  if(error) console.error('removeEntry failed:', error.message || error);
 }

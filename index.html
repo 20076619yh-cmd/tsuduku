@@ -111,8 +111,8 @@
       <!-- compact body-weight handle (edit/add); weight is displayed on 記録 -->
       <div id="dayWeightRow" class="mt-3"></div>
 
-      <!-- today's meal input (intake feeds the 記録 calorie-balance graph) -->
-      <div class="rounded-2xl bg-card border border-line shadow-card p-4 mt-5">
+      <!-- today's meal input (intake feeds the 記録 calorie-balance graph). TODAY選択時のみ表示 -->
+      <div id="mealCard" class="rounded-2xl bg-card border border-line shadow-card p-4 mt-5">
         <div class="flex items-center justify-between mb-3">
           <p id="mealLabel" class="text-[13px] font-extrabold text-ink">本日の食事</p>
           <button class="meal-add pop text-[11px] font-bold text-accent">＋ 入力</button>
@@ -290,14 +290,8 @@
     </div>
     <div id="sfMeal" class="hidden">
       <label class="block text-[11px] font-bold text-faint mb-1.5">摂取カロリー (kcal)</label>
-      <input id="sfKcal" type="number" inputmode="numeric" placeholder="1850" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-4">
-      <label class="block text-[11px] font-bold text-faint mb-1.5">タンパク質 (g)</label>
-      <input id="sfProtein" type="number" inputmode="numeric" placeholder="120" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-4">
-      <div class="grid grid-cols-2 gap-2">
-        <div><label class="block text-[11px] font-bold text-faint mb-1.5">脂質 (g)・任意</label><input id="sfFat" type="number" inputmode="numeric" placeholder="—" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink"></div>
-        <div><label class="block text-[11px] font-bold text-faint mb-1.5">炭水化物 (g)・任意</label><input id="sfCarbs" type="number" inputmode="numeric" placeholder="—" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink"></div>
-      </div>
-      <p class="text-[10px] text-faint mt-2">食品DB検索なし。数字をざっくり入れるだけ。摂取kcalは記録のカロリー収支に反映</p>
+      <input id="sfKcal" type="number" inputmode="numeric" placeholder="1850" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-2">
+      <p class="text-[10px] text-faint mt-2">食品DB検索なし。摂取kcalをざっくり入れるだけ。記録のカロリー収支に反映（P/F/Cは毎食入力が重いため廃止）</p>
     </div>
     <button id="sheetConfirm" class="pop w-full mt-3 bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">決定</button>
     <button id="sheetDelete" class="hidden pop w-full mt-2 text-[13px] font-bold text-sub border border-line rounded-2xl py-3">このエントリを削除</button>
