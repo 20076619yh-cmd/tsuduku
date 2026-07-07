@@ -874,10 +874,15 @@ function openSettings(){ closeProfile(); document.getElementById('settingsScrim'
 function closeSettings(){ document.getElementById('settingsSheet').classList.remove('open'); document.getElementById('settingsScrim').classList.add('hidden'); }
 // 初回オンボーディングツアー。各ステップで対象要素をハイライトし、その近くに吹き出しを出す。
 // target=対象のCSSセレクタ(nullは中央表示)。文言は後で磨く前提のドラフト。
-// 最小2ステップ: ①ようこそ → ②最初の一歩(＋宣言する を指す)で終了。行動を促して閉じる。
+// 6ステップ確定版。文言はプロダクトオーナー(開発者本人)指定を一字一句そのまま表示する。
+// AI側でタイトル等の文言を追加・整形しない(本文=指定テキストのみ・「使い方をもう一度見る」でも同一)。
 const TOUR_STEPS=[
-  { page:'schedule', target:null, t:'ようこそ 🌱', b:'fit tree は「運動の絵日記」。焦らず、あなたのペースで、そっと積み上げるアプリです。' },
-  { page:'schedule', target:'.declare-btn', t:'宣言をして予定を入れよう！', b:'まずはここから。「＋宣言する」で、きょう何をするかを先に決めます。これが最初の一歩です。' },
+  { page:'schedule', target:null, b:'fit tree は「運動の絵日記」。焦らず、あなたのペースで、そっと積み上げるアプリです！' },
+  { page:'schedule', target:'.declare-btn', b:'宣言をして予定を入れよう！' },
+  { page:'schedule', target:'#startBar', b:'予定を入れたら指定の時間に運動開始をして、運動をスタート！' },
+  { page:'feed',     target:'.nav-btn[data-page="feed"]', b:'タイムラインに自分が運動した記録が残り、みんなが見ることができます！' },
+  { page:'progress', target:'.nav-btn[data-page="progress"]', b:'そして自分の運動の記録はタイムラインと、記録に蓄積されていきます！' },
+  { page:'schedule', target:null, b:'一緒にあなただけの運動の記録を育てていきましょう！' },
 ];
 let tourIdx=0, tourHi=null;
 function clearTourHighlight(){ if(tourHi){ tourHi.style.boxShadow=''; tourHi.style.borderRadius=''; tourHi=null; } }
@@ -901,8 +906,8 @@ function renderTourStep(){
   const s=TOUR_STEPS[tourIdx]; if(!s) return;
   if(s.page) showPage(s.page);
   document.getElementById('tourStepNo').textContent=`${tourIdx+1} / ${TOUR_STEPS.length}`;
-  document.getElementById('tourTitle').textContent=s.t;
-  document.getElementById('tourBody').textContent=s.b;
+  document.getElementById('tourTitle').textContent='';   // AIタイトルは付けない(指定本文のみ)
+  document.getElementById('tourBody').textContent=s.b;    // プロダクトオーナー指定を一字一句
   document.getElementById('tourNext').textContent = tourIdx===TOUR_STEPS.length-1 ? 'はじめる' : '次へ';
   setTimeout(()=>placeTourCard(s.target), 60);   // showPage/描画後に位置決め
 }
