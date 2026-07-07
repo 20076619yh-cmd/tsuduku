@@ -12,6 +12,13 @@ let members = {
 };
 // First code point (not str[0]) so emoji / surrogate-pair nicknames don't get half-cut.
 function firstCP(s){ return (Array.from((s || '').trim())[0]) || '?'; }
+// アバターが絵文字頭文字のとき、名前表示から先頭の絵文字を落として二重表示を防ぐ(アバター=頭文字/名前=残り)。
+function isEmoji(ch){ return /\p{Extended_Pictographic}/u.test(ch || ''); }
+function heroDisplayName(nick){
+  const cp = Array.from((nick || '').trim());
+  if(cp.length && isEmoji(cp[0])){ const rest = cp.slice(1).join('').trim(); return rest || nick; }
+  return nick;
+}
 // 部位色: 肩腕を「肩(amber)」「腕(bronze)」に分割。近い暖色だが区別可。既存パレットと調和。
 // 未登録タグ(＋その他の自由テキスト)は tagDot[t]||'#9AA09A' でニュートラル灰に自動フォールバック。
 const tagDot = {
@@ -730,8 +737,24 @@ function fmtMinHtml(m){
   const h=Math.floor(m/60), mm=m%60;
   return (h?`${h}<span class="text-[10px] text-faint font-bold">時間</span>`:'')+((mm||!h)?`${mm}<span class="text-[10px] text-faint font-bold">分</span>`:'');
 }
+// 体重差分(前週比/前月比): cutoff より前の最新値と、cutoff 以降の最新値の差。
+// 減=▼(teal)/増=▲(faint・赤にしない=ノーシェイム)/変化なし=±0。データ不足は空。
+function weightDelta(cutoff){
+  const ws=logEntries.filter(e=>e.type==='weight'&&e.who===CURRENT_USER).slice().sort((a,b)=> a.date<b.date?-1:1);
+  const before=ws.filter(e=>e.date<cutoff), within=ws.filter(e=>e.date>=cutoff);
+  if(!within.length||!before.length) return '';
+  const d=+(within[within.length-1].kg - before[before.length-1].kg).toFixed(1);
+  if(d===0) return '±0kg';
+  return (d<0?'▼':'▲')+Math.abs(d)+'kg';
+}
 function renderProgressHero(){
-  const wk=logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&week.some(w=>w.date===e.date));
+  // 週/月トグルに追随: 月ビューは「今月」の集計、週ビューは「今週」。メンテ差分だけは現状(週)維持。
+  const month = chartMode==='month';
+  const {y:ty,m:tm}=parseYmd(TODAY);
+  const inPeriod = month ? (s)=>{ const p=parseYmd(s); return p.y===ty&&p.m===tm; } : (s)=> week.some(w=>w.date===s);
+  const cutoff = month ? ymd(ty,tm,1) : week[0].date;   // 前月比/前週比の境界
+  setHeroName();
+  const wk=logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&inPeriod(e.date));
   const doneWk=wk.filter(e=>e.status==='done');   // 実績は done のみ
   const set=(id,v)=>{const el=document.getElementById(id); if(el) el.textContent=v;};
   set('statDays', new Set(doneWk.map(e=>e.date)).size);   // 運動日数=実施済みのみ(予定は数えない)
@@ -742,9 +765,10 @@ function renderProgressHero(){
   set('heroPct', pct); set('heroCount', `${done}/${total}回`);
   const weights=logEntries.filter(e=>e.type==='weight'&&e.who===CURRENT_USER).slice().sort((a,b)=> a.date<b.date?-1:1);
   set('heroWeight', weights.length?weights[weights.length-1].kg:'—');
-  set('heroWeightDelta', weights.length?seriesDelta(weights.map(w=>w.kg)):'');
+  const del=document.getElementById('heroWeightDelta');
+  if(del){ const d=weightDelta(cutoff); del.textContent=d; del.classList.toggle('text-accent', d.startsWith('▼')); del.classList.toggle('text-faint', !d.startsWith('▼')); }
   const ht=document.getElementById('heroTime'); if(ht) ht.innerHTML=fmtMinHtml(doneWk.reduce((s,e)=>s+durToMin(e.dur),0));
-  const bser=weekBalSeries().filter(x=>x!=null);
+  const bser=weekBalSeries().filter(x=>x!=null);   // メンテ差分は現状維持(週ベース)
   if(bser.length){ const sum=bser.reduce((a,b)=>a+b,0); set('heroMaint', (sum<=0?'-':'+')+Math.abs(sum/1000).toFixed(1)+'k'); }
   else set('heroMaint','—');
 }
@@ -800,7 +824,13 @@ function renderIdentity(){
   const m = members[CURRENT_USER]; if(!m) return;
   const btn = document.getElementById('profileBtn'); if(btn) btn.textContent = m.ini;
   const ha  = document.getElementById('heroAvatar'); if(ha) ha.textContent = m.ini;
-  const hn  = document.getElementById('heroName');   if(hn) hn.textContent = `${m.name}の今週`;
+  setHeroName();
+}
+// 記録ヒーローの見出し「◯◯の今週/今月」。名前は絵文字二重を避け、期間は週/月トグルに追随。
+function setHeroName(){
+  const m = members[CURRENT_USER]; if(!m) return;
+  const hn = document.getElementById('heroName'); if(!hn) return;
+  hn.textContent = `${heroDisplayName(m.name)}の${chartMode==='month'?'今月':'今週'}`;
 }
 function saveProfile(){
   Object.assign(profile, readProfileForm());
