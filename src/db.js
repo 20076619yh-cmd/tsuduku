@@ -113,10 +113,10 @@ function mapPost(x){
     photo:x.photo, text:x.body, ruleLabel:x.rule_label, scope:'group', createdAt:x.created_at,
     r:x.reactions || { fire:0, muscle:0, clap:0 } };
 }
-// 週次振り返り型: streak(連続週数) / streakBest(自己ベスト) / weekChecked(今週チェック済み)
+// 日数ストリーク型: streakStart(開始/最終リセット日)のみ。自己ベストは持たない(育てる思想)。
 function mapRule(x){
   return { id:x.id, type:'limit', emoji:x.emoji, label:x.label, pub:x.pub,
-    streak:x.streak ?? 0, streakBest:x.streak_best ?? 0, weekChecked:!!x.week_checked };
+    streakStart:x.streak_start };
 }
 
 // ---- WRITE (Phase 3b) : fire-and-forget. Local update + render happen first in main.js;
@@ -154,12 +154,12 @@ export async function upsertPost(p){
   if(error) console.error('upsertPost failed:', error.message || error);
 }
 
-// rules(週次振り返り型)。total/done は本モデルで未使用(DB既定のまま)。
+// rules(日数ストリーク型)。total/done/streak/week_checked/streak_best は本モデルで未使用(DB既定のまま)。
 function ruleToRow(r){
   return {
     id: r.id, owner: _uid, space_id: _spaceId,
     emoji: r.emoji, label: r.label, pub: r.pub,
-    streak: r.streak ?? 0, streak_best: r.streakBest ?? 0, week_checked: !!r.weekChecked,
+    streak_start: r.streakStart ?? null,
   };
 }
 export async function upsertRule(r){
