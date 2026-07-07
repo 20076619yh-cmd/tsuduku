@@ -2,7 +2,7 @@
 import './style.css';
 import Chart from 'chart.js/auto';   // auto = same all-controllers registration as the old UMD CDN
 import { supabase } from './supabase.js';
-import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler } from './db.js';
+import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler, markTourDone } from './db.js';
 
 /* ---------- members ---------- */
 // Flat initial state: just me. Friends arrive in the backend/sharing phase (I/I2).
@@ -867,6 +867,35 @@ function closeProfileCard(){
   document.getElementById('pcSheet').classList.remove('open');
   document.getElementById('pcScrim').classList.add('hidden');
 }
+/* ---------- 通知パネル / 設定 / オンボーディングツアー(器) ---------- */
+function openNotify(){ document.getElementById('notifyScrim').classList.remove('hidden'); document.getElementById('notifySheet').classList.add('open'); }
+function closeNotify(){ document.getElementById('notifySheet').classList.remove('open'); document.getElementById('notifyScrim').classList.add('hidden'); }
+function openSettings(){ closeProfile(); document.getElementById('settingsScrim').classList.remove('hidden'); document.getElementById('settingsSheet').classList.add('open'); }
+function closeSettings(){ document.getElementById('settingsSheet').classList.remove('open'); document.getElementById('settingsScrim').classList.add('hidden'); }
+// 初回オンボーディングツアー(コーチマーク風カード)。文言は後で磨く前提のドラフト。
+const TOUR_STEPS=[
+  { page:null,        t:'ようこそ 🌱', b:'fit tree は「運動の絵日記」。焦らず、あなたのペースで、そっと積み上げるアプリです。' },
+  { page:'schedule',  t:'① 予定タブ', b:'ここは予定を「宣言」する場所。きょう何をするかを先に決めておくと、続けやすくなります。' },
+  { page:'schedule',  t:'② 運動開始バー', b:'画面下の「運動開始」でタイマー。終わると、その記録をタイムラインに投稿できます。' },
+  { page:'schedule',  t:'③ 自分ルール', b:'「甘いものを食べない」等を植えて育てます。破らない限り毎日そっと積み上がり、破っても責めません。' },
+  { page:'progress',  t:'④ 記録タブ', b:'運動日数・連続記録・体重などを振り返る場所。数字は大きく、プレッシャーは小さく。' },
+  { page:'schedule',  t:'それでは、はじめましょう 🌱', b:'焦らなくて大丈夫。あなたのペースで、そっと積み上げていきましょう。' },
+];
+let tourIdx=0;
+function renderTourStep(){
+  const s=TOUR_STEPS[tourIdx]; if(!s) return;
+  if(s.page) showPage(s.page);
+  document.getElementById('tourStepNo').textContent=`${tourIdx+1} / ${TOUR_STEPS.length}`;
+  document.getElementById('tourTitle').textContent=s.t;
+  document.getElementById('tourBody').textContent=s.b;
+  document.getElementById('tourNext').textContent = tourIdx===TOUR_STEPS.length-1 ? 'はじめる' : '次へ';
+}
+function openTour(){ tourIdx=0; document.getElementById('tourOverlay').classList.remove('hidden'); renderTourStep(); }
+function endTour(){
+  document.getElementById('tourOverlay').classList.add('hidden');
+  if(members[CURRENT_USER]) markTourDone(CURRENT_USER);   // 完了を保存(次回は出さない)
+}
+function tourNext(){ if(tourIdx>=TOUR_STEPS.length-1){ endTour(); } else { tourIdx++; renderTourStep(); } }
 // 「＋その他」カスタムタグ入力(prompt置換の共通ボトムシート)。ctx=start/sheet/post
 let tagOtherCtx=null;
 function openTagOther(ctx){
@@ -1010,6 +1039,16 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#profileBtn')) openProfile();
   if(e.target.closest('#profileSave')) saveProfile();
   if(e.target.closest('#profileCancel')||e.target.closest('#profileScrim')) closeProfile();
+  // 通知ベル / 設定 / ツアー
+  if(e.target.closest('#bellBtn')) openNotify();
+  if(e.target.closest('#notifyClose')||e.target.closest('#notifyScrim')) closeNotify();
+  if(e.target.closest('#notifyTour')){ closeNotify(); openTour(); }
+  if(e.target.closest('#openSettings')) openSettings();
+  if(e.target.closest('#settingsClose')||e.target.closest('#settingsScrim')) closeSettings();
+  if(e.target.closest('#settingsTour')){ closeSettings(); openTour(); }
+  if(e.target.closest('#settingsLogout')){ closeSettings(); supabase.auth.signOut(); }
+  if(e.target.closest('#tourNext')) tourNext();
+  if(e.target.closest('#tourSkip')) endTour();
 });
 // live maintenance preview while editing the profile sheet
 document.addEventListener('input', e=>{ if(e.target.closest('#profileSheet')) updateProfilePreview(); });
@@ -1036,6 +1075,8 @@ async function initApp(session){
   renderMeal(); renderLimits(); renderMonth(); renderMaintCaption(); renderStartBar(); renderStats();
   renderIdentity();
   showPage('schedule');   // app opens on 予定 (also reveals the 運動開始 bar)
+  if(!profile.tourDone) openTour();   // 初回のみオンボーディングツアー
+
 }
 
 /* ---------- auth gate (Phase 2): Google login wraps the app, no data yet ---------- */

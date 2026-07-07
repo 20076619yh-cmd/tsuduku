@@ -78,7 +78,13 @@ export function profileFromRow(row){
     bodyfat: row.body_fat_pct ?? 18,
     activity: row.activity_coef ?? 1.45,
     maintenanceOverride: row.maintenance_override ?? null,
+    tourDone: !!row.tour_done,   // 初回オンボーディング完了フラグ
   };
+}
+// ツアー完了を保存。列(tour_done)未追加でも致命ではないので console.error のみ(トーストは出さない)。
+export async function markTourDone(userId){
+  const { error } = await supabase.from('users').update({ tour_done: true }).eq('id', userId);
+  if(error) console.error('markTourDone failed:', error.message || error);
 }
 
 // in-memory profile → users row. maintenanceKcal = effective value (override or computed),

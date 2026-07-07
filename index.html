@@ -42,7 +42,7 @@
         <h1 class="text-[16px] font-extrabold text-ink tracking-tight">fit tree</h1>
       </div>
       <div class="flex items-center gap-2">
-        <button class="pop w-8 h-8 rounded-full flex items-center justify-center text-sub">
+        <button id="bellBtn" class="pop w-8 h-8 rounded-full flex items-center justify-center text-sub">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-[18px] h-[18px]"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>
         </button>
         <button id="profileBtn" class="profile-btn pop w-8 h-8 rounded-full flex items-center justify-center text-white text-[13px] font-bold" style="background:#14B87C">ボ</button>
@@ -320,7 +320,56 @@
     </div>
     <p class="text-[10px] text-faint mb-3 leading-relaxed">※式は個人で±200〜400kcalずれ得る初期の目安。将来は体重×カロリー実データで補正予定。認証・保存は別フェーズ。</p>
     <button id="profileSave" class="pop w-full bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">保存</button>
+    <button id="openSettings" class="pop w-full mt-2 text-[13px] font-bold text-sub border border-line rounded-2xl py-3 flex items-center justify-center gap-1.5">⚙️ 設定</button>
     <button id="logoutBtn" class="pop w-full mt-2 text-[13px] font-bold text-sub border border-line rounded-2xl py-3">ログアウト</button>
+  </div>
+
+  <!-- 通知パネル(器)。今は空状態＋使い方リンク。将来の達成/リマインドの受け皿 -->
+  <div id="notifyScrim" class="sheet-scrim absolute inset-0 z-40 hidden"></div>
+  <div id="notifySheet" class="sheet absolute inset-x-0 bottom-0 z-50 bg-card rounded-t-[24px] border-t border-line px-5 pt-3 pb-7">
+    <div class="w-10 h-1 rounded-full bg-line mx-auto mb-4"></div>
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-[16px] font-extrabold text-ink">お知らせ</p>
+      <button id="notifyClose" class="pop text-[12px] font-bold text-sub">閉じる</button>
+    </div>
+    <div class="text-center py-10 rounded-2xl bg-bg border border-dashed border-line">
+      <p class="text-[26px]">🌱</p>
+      <p class="text-[13px] text-faint font-bold mt-2">お知らせはまだありません</p>
+    </div>
+    <button id="notifyTour" class="pop w-full mt-3 text-[13px] font-bold text-accent border border-aline bg-asoft rounded-2xl py-3">使い方を見る</button>
+  </div>
+
+  <!-- 設定(器)。今動く=使い方再表示/ログアウト。将来項目はグレー「準備中」 -->
+  <div id="settingsScrim" class="sheet-scrim absolute inset-0 z-40 hidden"></div>
+  <div id="settingsSheet" class="sheet absolute inset-x-0 bottom-0 z-50 bg-card rounded-t-[24px] border-t border-line px-5 pt-3 pb-7">
+    <div class="w-10 h-1 rounded-full bg-line mx-auto mb-4"></div>
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-[16px] font-extrabold text-ink">設定</p>
+      <button id="settingsClose" class="pop text-[12px] font-bold text-sub">閉じる</button>
+    </div>
+    <button id="settingsTour" class="pop w-full text-left text-[13px] font-bold text-ink border border-line rounded-2xl px-4 py-3 mb-2">使い方をもう一度見る</button>
+    <button id="settingsLogout" class="pop w-full text-left text-[13px] font-bold text-ink border border-line rounded-2xl px-4 py-3 mb-4">ログアウト</button>
+    <p class="text-[10px] font-bold text-faint mb-2">準備中</p>
+    <div class="space-y-2 opacity-50 pointer-events-none">
+      <div class="text-[13px] font-bold text-sub border border-line rounded-2xl px-4 py-3">言語（日本語 / English / 中文）</div>
+      <div class="text-[13px] font-bold text-sub border border-line rounded-2xl px-4 py-3">文字の大きさ</div>
+      <div class="text-[13px] font-bold text-sub border border-line rounded-2xl px-4 py-3">通知設定</div>
+      <div class="text-[13px] font-bold text-sub border border-line rounded-2xl px-4 py-3">サブスクリプション管理</div>
+      <div class="text-[13px] font-bold text-sub border border-line rounded-2xl px-4 py-3">利用規約 / プライバシーポリシー</div>
+    </div>
+  </div>
+
+  <!-- オンボーディングツアー(初回)。コーチマーク風カード＋次へ/スキップ -->
+  <div id="tourOverlay" class="absolute inset-0 z-[80] hidden flex items-end justify-center bg-black/40 px-5 pb-10">
+    <div class="w-full max-w-[340px] bg-card rounded-3xl border border-line shadow-lift p-5">
+      <p id="tourStepNo" class="text-[10px] font-bold text-faint mb-1.5"></p>
+      <p id="tourTitle" class="text-[16px] font-extrabold text-ink mb-1.5"></p>
+      <p id="tourBody" class="text-[13px] text-sub leading-relaxed mb-4"></p>
+      <div class="flex items-center justify-between">
+        <button id="tourSkip" class="pop text-[12px] font-bold text-faint">スキップ</button>
+        <button id="tourNext" class="pop bg-accent text-white text-[13px] font-extrabold rounded-full px-6 py-2.5">次へ</button>
+      </div>
+    </div>
   </div>
 
   <!-- profile CARD (閲覧用・アバタータップ)。他人参照はPhase 4で結線 -->
