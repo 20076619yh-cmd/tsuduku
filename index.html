@@ -336,6 +336,16 @@
     <button id="pcClose" class="pop w-full mt-4 text-[13px] font-bold text-sub border border-line rounded-2xl py-3">閉じる</button>
   </div>
 
+  <!-- custom tag (＋その他) 入力シート: 運動開始/予定/投稿で共通。prompt()の置換 -->
+  <div id="tagOtherScrim" class="sheet-scrim absolute inset-0 z-[55] hidden"></div>
+  <div id="tagOtherSheet" class="sheet absolute inset-x-0 bottom-0 z-[60] bg-card rounded-t-[24px] border-t border-line px-5 pt-3 pb-7">
+    <div class="w-10 h-1 rounded-full bg-line mx-auto mb-4"></div>
+    <label class="block text-[11px] font-bold text-faint mb-1.5">部位・メニュー名</label>
+    <input id="tagOtherInput" type="text" placeholder="例: 前腕 / ランニング" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-1">
+    <button id="tagOtherConfirm" class="pop w-full mt-3 bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">追加</button>
+    <button id="tagOtherCancel" class="pop w-full mt-2 text-[12px] font-bold text-faint py-2">キャンセル</button>
+  </div>
+
   <!-- add self-rule sheet (mock) -->
   <div id="ruleScrim" class="sheet-scrim absolute inset-0 z-40 hidden"></div>
   <div id="ruleSheet" class="sheet absolute inset-x-0 bottom-0 z-50 bg-card rounded-t-[24px] border-t border-line px-5 pt-3 pb-7">

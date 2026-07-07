@@ -857,6 +857,29 @@ function closeProfileCard(){
   document.getElementById('pcSheet').classList.remove('open');
   document.getElementById('pcScrim').classList.add('hidden');
 }
+// 「＋その他」カスタムタグ入力(prompt置換の共通ボトムシート)。ctx=start/sheet/post
+let tagOtherCtx=null;
+function openTagOther(ctx){
+  tagOtherCtx=ctx;
+  const inp=document.getElementById('tagOtherInput'); if(inp){ inp.value=''; }
+  document.getElementById('tagOtherScrim').classList.remove('hidden');
+  document.getElementById('tagOtherSheet').classList.add('open');
+  if(inp) setTimeout(()=>inp.focus(),50);
+}
+function closeTagOther(){
+  document.getElementById('tagOtherSheet').classList.remove('open');
+  document.getElementById('tagOtherScrim').classList.add('hidden');
+  tagOtherCtx=null;
+}
+function confirmTagOther(){
+  const v=(document.getElementById('tagOtherInput').value||'').trim();
+  if(v){
+    if(tagOtherCtx==='start'){ if(!startTags.includes(v)) startTags.push(v); renderStartTags(); }
+    else if(tagOtherCtx==='sheet'){ if(!sfTags.includes(v)) sfTags.push(v); renderSheetTags(); }
+    else if(tagOtherCtx==='post'){ if(!postTags.includes(v)) postTags.push(v); renderPostTags(); }
+  }
+  closeTagOther();
+}
 // nick is the single source of truth for display name + avatar initial (header + 記録 hero).
 // 画像があれば画像、無ければ頭文字(ヘッダ・記録ヒーロー・プロフィールシート共通)
 function applyAvatarEl(el, m){ if(!el || !m) return;
@@ -930,12 +953,14 @@ document.addEventListener('click',e=>{
   if(e.target.closest('.stop-workout')) onStopWorkout();
   const sct=e.target.closest('.start-tag');
   if(sct){ const t=sct.dataset.tag; const i=startTags.indexOf(t); if(i>=0) startTags.splice(i,1); else startTags.push(t); renderStartTags(); }
-  if(e.target.closest('.start-tag-other')){ const t=(prompt('部位・メニュー名を入力')||'').trim(); if(t && !startTags.includes(t)) startTags.push(t); renderStartTags(); }
+  if(e.target.closest('.start-tag-other')) openTagOther('start');
   if(e.target.closest('#startGo')) onStartGo();
   if(e.target.closest('#startCancel')||e.target.closest('#startScrim')) closeStartSheet();
   const ptag=e.target.closest('.ps-tag');
   if(ptag){ const t=ptag.dataset.tag; const i=postTags.indexOf(t); if(i>=0) postTags.splice(i,1); else postTags.push(t); renderPostTags(); }
-  if(e.target.closest('.ps-tag-other')){ const t=(prompt('部位・メニュー名を入力')||'').trim(); if(t && !postTags.includes(t)) postTags.push(t); renderPostTags(); }
+  if(e.target.closest('.ps-tag-other')) openTagOther('post');
+  if(e.target.closest('#tagOtherConfirm')) confirmTagOther();
+  if(e.target.closest('#tagOtherCancel')||e.target.closest('#tagOtherScrim')) closeTagOther();
   if(e.target.closest('#postSubmit')) submitPost();
   if(e.target.closest('#postCancel')||e.target.closest('#postScrim')) closePostSheet();
   const day=e.target.closest('.day-pill');
@@ -968,7 +993,7 @@ document.addEventListener('click',e=>{
   const sft=e.target.closest('.sf-type'); if(sft) setSheetType(sft.dataset.sftype);
   const stag=e.target.closest('.sf-tag');
   if(stag){ const t=stag.dataset.tag; const i=sfTags.indexOf(t); if(i>=0) sfTags.splice(i,1); else sfTags.push(t); renderSheetTags(); }
-  if(e.target.closest('.sf-tag-other')){ const t=(prompt('部位・メニュー名を入力')||'').trim(); if(t && !sfTags.includes(t)) sfTags.push(t); renderSheetTags(); }
+  if(e.target.closest('.sf-tag-other')) openTagOther('sheet');
   if(e.target.closest('#sheetConfirm')) confirmSheet();
   if(e.target.closest('#sheetCancel')||e.target.closest('#sheetScrim')) closeSheet();
 
