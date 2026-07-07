@@ -11,8 +11,11 @@
   - スキーマ: 6テーブル(space_id込み)＋RLS＋is_space_member＋GRANT(authenticatedのみ)。usersに activity_coef/maintenance_override 追加でprofile3項目往復
   - 学び: GRANTとRLSは別レイヤー(GRANT無いと42501)／spaces insertは読み返し不可でid=crypto.randomUUID()採番。詳細は CLAUDE.md「Phase 3a 完了」参照
   - 通し確認済み: ログイン→3テーブル各1行自動作成／nick連動(絵文字OK)／プロフィール保存→リロード完全復元
-- [ ] Phase 3b: entries/rules/posts の保存配線＋保存→リロード復元の通し確認 ← **次回着手**
-  - 併せて: 食事P/F/C削除(confirmSheet meal書き込み＋入力UI)／dur は秒(dur_sec)で保存し表示側で整形／onAuthStateChange内awaitのデッドロック対策(setTimeout(0))を検討
+- [x] Phase 3b: entries/rules/posts の保存配線＋保存→リロード復元 — 完了
+  - 3b-1(entries): upsertEntry/removeEntry・編集id上書き・dur_sec保存・食事P/F/C削除・部位タグ肩腕分割＋その他・実績done集計・本日カードTODAY基準
+  - 3b-2(posts+rules): addPost→upsertPost・ルール週次振り返り型(upsertRule/removeRule)・踏みとどまった削除・ストリーク自己ベスト併記・達成カードに連続情報。rulesに streak/streak_best/week_checked 追加
+  - 済: 食事P/F/C削除／dur秒化。未対応(残):onAuthStateChange内awaitデッドロック対策(setTimeout(0))は書き込み増時に再検討
+- [ ] 【将来】ヒーローの「連続記録」を運動ベースへ切替(実日付化とセット): 予定日done→+1/予定日すっぽかし→切れる/予定なし日→影響なし。entries履歴から算出(users列不要)。現状はルール連続を暫定表示(単位=週)
 - [ ] Phase 4以降: spaces/space_members共有＋RLSテスト→スペース作成UI→リアルタイム(CLAUDE.md参照)
 
 ## 着手順

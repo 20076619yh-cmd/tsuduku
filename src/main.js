@@ -2,7 +2,7 @@
 import './style.css';
 import Chart from 'chart.js/auto';   // auto = same all-controllers registration as the old UMD CDN
 import { supabase } from './supabase.js';
-import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry } from './db.js';
+import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule } from './db.js';
 
 /* ---------- members ---------- */
 // Flat initial state: just me. Friends arrive in the backend/sharing phase (I/I2).
@@ -35,16 +35,14 @@ function hudCell(label,val,color){
 }
 
 /* ---------- FEED ---------- */
-// Flat initial state: no sample posts. Posts are created via createPost (timer/resist/achieve).
+// Flat initial state: no sample posts. Posts are created via createPost (timer-stop / rule-kept).
 const posts = [];
-// every post carries who + scope (公開範囲) for future export/share; ids for reference
-let postSeq=0;
-posts.forEach(p=>{ p.id='p'+(postSeq++); if(!p.scope) p.scope='group'; });
-// single source of truth for creating timeline posts (timer-stop / resist / future done-share all use this)
-function createPost({kind='workout', who=CURRENT_USER, tags=[], dur=null, photo=null, text='', ruleLabel=null, scope='group'}){
-  return { id:'p'+(postSeq++), kind, who, scope, time:'いま', tags:(tags||[]).slice(), dur, photo, text, ruleLabel, r:{fire:0,muscle:0,clap:0} };
+// single source of truth for creating timeline posts. id=crypto.randomUUID (same id in DB).
+function createPost({kind='workout', who=CURRENT_USER, tags=[], dur=null, durSec=null, photo=null, text='', ruleLabel=null, scope='group'}){
+  return { id:crypto.randomUUID(), kind, who, scope, time:'いま', tags:(tags||[]).slice(), dur, durSec, photo, text, ruleLabel, r:{fire:0,muscle:0,clap:0} };
 }
-function addPost(p){ posts.unshift(p); renderFeed(); }
+// single funnel: local prepend + render, then persist in background (失敗はconsole.error)
+function addPost(p){ posts.unshift(p); renderFeed(); upsertPost(p); }
 
 /* ---------- workout timer (E2) + post flow (E) ---------- */
 let timerRunning=false, timerSec=0, timerInterval=null, timerTags=[];
@@ -103,10 +101,10 @@ function onStopWorkout(){
   }
   rerenderAfterChange();
   // (2) open the share (post) flow with the same tags + measured time
-  openPostSheet(timerTags, dur);
+  openPostSheet(timerTags, dur, durSec);
 }
-function openPostSheet(tags, dur){
-  pendingPhoto=null; postCtx={tags:(tags||[]).slice(), dur};
+function openPostSheet(tags, dur, durSec){
+  pendingPhoto=null; postCtx={tags:(tags||[]).slice(), dur, durSec};
   document.getElementById('psTags').innerHTML=(tags||[]).map(t=>chip(t)).join('');
   document.getElementById('psDur').textContent='実施 '+dur;
   document.getElementById('psPhotoPreview').innerHTML='';
@@ -125,7 +123,7 @@ function handlePhoto(file){
 function submitPost(){
   if(!postCtx) return;
   const text=document.getElementById('psText').value.trim();
-  addPost(createPost({kind:'workout', who:CURRENT_USER, tags:postCtx.tags, dur:postCtx.dur, photo:pendingPhoto, text, scope:'group'}));
+  addPost(createPost({kind:'workout', who:CURRENT_USER, tags:postCtx.tags, dur:postCtx.dur, durSec:postCtx.durSec, photo:pendingPhoto, text, scope:'group'}));
   postCtx=null; pendingPhoto=null;
   closePostSheet();
   showPage('feed');
@@ -152,24 +150,7 @@ function renderFeed(){
   }
   list.innerHTML = posts.map((p,i)=>{
     const m=members[p.who];
-    if(p.kind==='resist') return `
-    <article class="rounded-2xl bg-asoft border border-aline shadow-card overflow-hidden">
-      <div class="flex items-center gap-3 px-4 pt-3.5">
-        ${avatar(m,38)}
-        <div class="flex-1">
-          <p class="text-[14px] font-extrabold text-ink leading-none">${m.name}</p>
-          <p class="text-[11px] text-faint mt-1">きょう ${p.time}</p>
-        </div>
-        <span class="inline-flex items-center gap-1 text-[11px] font-bold text-accent bg-card border border-aline px-2.5 py-1 rounded-full">🛡 踏みとどまった</span>
-      </div>
-      <div class="px-4 pt-3 pb-1">
-        <p class="text-[14px] text-ink leading-snug">${p.text}</p>
-        ${p.ruleLabel?`<div class="mt-2.5 flex items-center gap-1.5 text-[12px] font-bold text-accent"><span class="w-1.5 h-1.5 rounded-full bg-accent"></span>自分ルール「${p.ruleLabel}」を守った</div>`:''}
-      </div>
-      <div class="flex gap-2 px-4 py-3">
-        ${reactBtn(i,'fire','🔥',p.r.fire)}${reactBtn(i,'muscle','💪',p.r.muscle)}${reactBtn(i,'clap','👏',p.r.clap)}
-      </div>
-    </article>`;
+    // 達成カード(kind:'achieve')。p.text に連続週数(＋自己ベスト)の行を持たせ、友達にも見える。
     if(p.kind==='achieve') return `
     <article class="rounded-2xl bg-asoft border border-aline shadow-card overflow-hidden">
       <div class="flex items-center gap-3 px-4 pt-3.5">
@@ -181,8 +162,8 @@ function renderFeed(){
         <span class="inline-flex items-center gap-1 text-[11px] font-bold text-accent bg-card border border-aline px-2.5 py-1 rounded-full">🎯 ルール達成</span>
       </div>
       <div class="px-4 pt-3 pb-1">
-        <p class="text-[14px] text-ink leading-snug">${p.text}</p>
-        ${p.ruleLabel?`<div class="mt-2.5 flex items-center gap-1.5 text-[12px] font-bold text-accent"><span class="w-1.5 h-1.5 rounded-full bg-accent"></span>自分ルール「${p.ruleLabel}」を達成</div>`:''}
+        ${p.ruleLabel?`<p class="text-[14px] text-ink leading-snug">自分ルール「${p.ruleLabel}」を今週も守れた</p>`:''}
+        ${p.text?`<div class="mt-2 flex items-center gap-1.5 text-[12px] font-extrabold text-accent"><span class="w-1.5 h-1.5 rounded-full bg-accent"></span>${p.text}</div>`:''}
       </div>
       <div class="flex gap-2 px-4 py-3">
         ${reactBtn(i,'fire','🔥',p.r.fire)}${reactBtn(i,'muscle','💪',p.r.muscle)}${reactBtn(i,'clap','👏',p.r.clap)}
@@ -554,47 +535,56 @@ function renderDayWeight(){
 // self-rules: each picks 公開(みんなが見れる) or 自分だけ(非公開). No 4-step scope, no warnings. Max 3.
 // Flat initial state: no rules yet. User adds up to 3 via 「＋ルール追加」.
 const limits = [];
+// 週次振り返り型: 週1回「今週守れた」をタップ。守れた✓のみ・未達は何も記録しない(ノーシェイム)。
 function renderLimits(){
   const list=document.getElementById('limitList');
   if(!list) return;
   list.innerHTML = limits.length ? limits.map((l,i)=>{
-    const count = l.total ? `<span class="text-[10px] font-bold text-faint ml-2">今週 ${l.done}/${l.total}</span>` : '';
+    // 連続週数(＋自己ベストを faint 併記。best>currentのときだけ)
+    const streakChip = l.streak
+      ? `<span class="text-[10px] font-extrabold text-accent ml-2">🔥${l.streak}週${l.streakBest>l.streak?`<span class="text-faint font-bold ml-0.5">(最高${l.streakBest})</span>`:''}</span>`
+      : '';
+    const action = l.weekChecked
+      ? `<span class="text-[11px] font-extrabold text-accent bg-asoft border border-aline px-2.5 py-1.5 rounded-full shrink-0">✓ 今週OK</span>`
+      : `<button class="rule-done pop text-[11px] font-extrabold text-white bg-accent px-2.5 py-1.5 rounded-full shrink-0">今週守れた</button>`;
     return `<div class="limit flex items-center gap-2 rounded-2xl border bg-card border-line px-3 py-2.5" data-i="${i}">
       <span class="text-[15px] shrink-0">${l.emoji}</span>
-      <div class="flex-1 min-w-0"><p class="text-[13px] font-bold text-ink truncate">${l.label}${count}</p></div>
+      <div class="flex-1 min-w-0"><p class="text-[13px] font-bold text-ink truncate">${l.label}${streakChip}</p></div>
       <button class="rule-pub pop flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border shrink-0 ${l.pub?'bg-asoft border-aline text-accent':'bg-card border-line text-faint'}">${l.pub?'🌐 公開':'🔒 自分だけ'}</button>
-      <button class="rule-done pop text-[11px] font-extrabold text-white bg-accent px-2.5 py-1.5 rounded-full shrink-0">達成</button>
+      ${action}
       <button class="rule-del pop text-faint text-[13px] leading-none shrink-0 pl-0.5">✕</button>
     </div>`;
   }).join('') : `<p class="text-[12px] text-faint text-center py-3">まだ自分ルールはありません。「＋ルール追加」でそっと決められます</p>`;
   const addBtn=document.getElementById('ruleAddBtn');
   if(addBtn) addBtn.classList.toggle('hidden', limits.length>=3);
 }
-// no-shame: 達成した時だけ祝う(公開ならタイムラインへ)。未達は何も晒さない・通知しない・×を残さない。
-function recordRuleAchieve(i){
-  const l=limits[i]; if(!l) return;
-  if(l.total) l.done=Math.min((l.done||0)+1, l.total);
-  streak++;
+// 週次「今週守れた」: 連続週数+1・自己ベスト更新。公開なら達成カード(連続情報つき)を投稿。
+// no-shame: 守れなかったは何も記録しない・晒さない・通知しない。既にチェック済みは何もしない(連打防止)。
+function recordRuleKept(i){
+  const l=limits[i]; if(!l || l.weekChecked) return;
+  l.weekChecked=true;
+  l.streak=(l.streak||0)+1;
+  if(l.streak>(l.streakBest||0)) l.streakBest=l.streak;   // 自己ベスト更新(切れても残す)
+  upsertRule(l);
   renderStreak(); renderLimits();
   if(typeof renderProgressHero==='function') renderProgressHero();
   if(l.pub){
-    addPost(createPost({kind:'achieve', who:CURRENT_USER, ruleLabel:l.label, text:`自分ルール「${l.label}」を達成。続いてる自分をほめる`, scope:'all'}));
+    const line=`🔥${l.streak}週連続${l.streakBest>l.streak?`（自己ベスト${l.streakBest}週）`:''}`;
+    addPost(createPost({kind:'achieve', who:CURRENT_USER, ruleLabel:l.label, text:line, scope:'all'}));
     showPage('feed');
   }
 }
 
-/* ---------- self-rule add + resist record (record-only; timeline post = batch2) ---------- */
-let resistWeek=0;
-let streak=0;   // 🔥有言実行の連続。自分ルール達成/継続で育つ（F項目はここに吸収）
-function renderStreak(){ const el=document.getElementById('streakCount'); if(el) el.textContent=streak; }
-function recordResist(){
-  resistWeek++;
-  const el=document.getElementById('resistCount');
-  if(el) el.textContent=`今週 ${resistWeek}回 踏みとどまった`;
+/* ---------- self-rule add + streak (週次振り返り型) ---------- */
+// 有言実行の連続はルールの連続を集約(current=max, best=max)。usersに列は持たない。
+function curStreak(){ return limits.reduce((m,l)=>Math.max(m,l.streak||0),0); }
+function bestStreak(){ return limits.reduce((m,l)=>Math.max(m,l.streakBest||0),0); }
+function renderStreak(){
+  const el=document.getElementById('streakCount'); if(el) el.textContent=curStreak();
+  const be=document.getElementById('streakBest'); if(be){ const c=curStreak(),b=bestStreak(); be.textContent = b>c ? `(最高 ${b})` : ''; }
 }
 function openRule(){
   document.getElementById('rfLabel').value='';
-  document.getElementById('rfTotal').value='';
   document.getElementById('ruleScrim').classList.remove('hidden');
   document.getElementById('ruleSheet').classList.add('open');
 }
@@ -606,8 +596,8 @@ function saveRule(){
   const label=(document.getElementById('rfLabel').value||'').trim();
   if(!label){ closeRule(); return; }
   if(limits.length>=3){ closeRule(); return; }   // 最大3つ（静かに止めるだけ・警告は出さない）
-  const total=parseInt(document.getElementById('rfTotal').value)||0;
-  limits.push({type:'limit', emoji:'🎯', label, done:0, total, pub:true});
+  const r={id:crypto.randomUUID(), type:'limit', emoji:'🎯', label, pub:true, streak:0, streakBest:0, weekChecked:false};
+  limits.push(r); upsertRule(r);
   closeRule(); renderLimits();
 }
 
@@ -733,7 +723,8 @@ function renderProgressHero(){
   const doneWk=wk.filter(e=>e.status==='done');   // 実績は done のみ
   const set=(id,v)=>{const el=document.getElementById(id); if(el) el.textContent=v;};
   set('statDays', new Set(doneWk.map(e=>e.date)).size);   // 運動日数=実施済みのみ(予定は数えない)
-  set('heroStreak', streak);
+  set('heroStreak', curStreak());
+  const hsb=document.getElementById('heroStreakBest'); if(hsb){ const c=curStreak(),b=bestStreak(); hsb.textContent = b>c ? `最高 ${b}` : ''; }
   const total=wk.length, done=doneWk.length;   // ring=予定達成率(planned含むtotal), done=実施済み
   const pct = total ? Math.round(done/total*100) : 0;
   const ring=document.getElementById('heroRing'); if(ring) ring.setAttribute('stroke-dashoffset', (94.2*(1-pct/100)).toFixed(1));
@@ -837,23 +828,17 @@ document.addEventListener('click',e=>{
     updateWeight(seg.dataset.seg);
   }
   const rdel=e.target.closest('.rule-del');
-  if(rdel){ const li=rdel.closest('.limit'); if(li){ limits.splice(+li.dataset.i,1); renderLimits(); } }
+  if(rdel){ const li=rdel.closest('.limit'); if(li){ const idx=+li.dataset.i; const rl=limits[idx]; if(rl) removeRule(rl.id); limits.splice(idx,1); renderLimits(); } }
   const rpub=e.target.closest('.rule-pub');
-  if(rpub){ const li=rpub.closest('.limit'); if(li){ limits[+li.dataset.i].pub=!limits[+li.dataset.i].pub; renderLimits(); } }
+  if(rpub){ const li=rpub.closest('.limit'); if(li){ const rl=limits[+li.dataset.i]; if(rl){ rl.pub=!rl.pub; upsertRule(rl); renderLimits(); } } }
   const rdone=e.target.closest('.rule-done');
-  if(rdone){ const li=rdone.closest('.limit'); if(li) recordRuleAchieve(+li.dataset.i); }
+  if(rdone){ const li=rdone.closest('.limit'); if(li) recordRuleKept(+li.dataset.i); }
   if(e.target.closest('.meal-add')) openSheet('meal', TODAY);   // 本日の食事カード → TODAY固定
   const eedit=e.target.closest('.entry-edit'); if(eedit) openSheetEdit(eedit.dataset.id);
   if(e.target.closest('#sheetDelete')) deleteEntry();
   if(e.target.closest('.rule-add')) openRule();
   if(e.target.closest('#ruleSave')) saveRule();
   if(e.target.closest('#ruleCancel')||e.target.closest('#ruleScrim')) closeRule();
-  if(e.target.closest('.resist-add')){
-    recordResist();
-    const rule = limits[0] ? limits[0].label : null;
-    addPost(createPost({kind:'resist', who:CURRENT_USER, ruleLabel:rule, text:'今日は誘惑に勝った。踏みとどまった自分をほめる', scope:'group'}));
-    showPage('feed');
-  }
   if(e.target.closest('.start-workout')) onStartWorkout();
   if(e.target.closest('.stop-workout')) onStopWorkout();
   const sct=e.target.closest('.start-tag');

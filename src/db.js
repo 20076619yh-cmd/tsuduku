@@ -109,12 +109,14 @@ function mapEntry(x){
     status:x.status, kg:x.kg, kcal:x.kcal };
 }
 function mapPost(x){
-  return { id:x.id, who:x.owner, kind:x.kind, tags:x.tags || [], dur:x.dur_sec,
+  return { id:x.id, who:x.owner, kind:x.kind, tags:x.tags || [], durSec:x.dur_sec, dur:durLabel(x.dur_sec),
     photo:x.photo, text:x.body, ruleLabel:x.rule_label, scope:'group', time:'いま',
     r:x.reactions || { fire:0, muscle:0, clap:0 } };
 }
+// 週次振り返り型: streak(連続週数) / streakBest(自己ベスト) / weekChecked(今週チェック済み)
 function mapRule(x){
-  return { id:x.id, type:'limit', emoji:x.emoji, label:x.label, total:x.total, done:x.done, pub:x.pub };
+  return { id:x.id, type:'limit', emoji:x.emoji, label:x.label, pub:x.pub,
+    streak:x.streak ?? 0, streakBest:x.streak_best ?? 0, weekChecked:!!x.week_checked };
 }
 
 // ---- WRITE (Phase 3b) : fire-and-forget. Local update + render happen first in main.js;
@@ -137,4 +139,34 @@ export async function upsertEntry(e){
 export async function removeEntry(id){
   const { error } = await supabase.from('entries').delete().eq('id', id);
   if(error) console.error('removeEntry failed:', error.message || error);
+}
+
+// posts. 写真は Phase 5(Storage)まで非永続 → photo:null。reactions は DB 既定のまま(非永続)。
+function postToRow(p){
+  return {
+    id: p.id, owner: _uid, space_id: _spaceId, kind: p.kind,
+    tags: p.tags || [], dur_sec: p.durSec ?? null, photo: null,
+    body: p.text ?? null, rule_label: p.ruleLabel ?? null,
+  };
+}
+export async function upsertPost(p){
+  const { error } = await supabase.from('posts').upsert(postToRow(p));
+  if(error) console.error('upsertPost failed:', error.message || error);
+}
+
+// rules(週次振り返り型)。total/done は本モデルで未使用(DB既定のまま)。
+function ruleToRow(r){
+  return {
+    id: r.id, owner: _uid, space_id: _spaceId,
+    emoji: r.emoji, label: r.label, pub: r.pub,
+    streak: r.streak ?? 0, streak_best: r.streakBest ?? 0, week_checked: !!r.weekChecked,
+  };
+}
+export async function upsertRule(r){
+  const { error } = await supabase.from('rules').upsert(ruleToRow(r));
+  if(error) console.error('upsertRule failed:', error.message || error);
+}
+export async function removeRule(id){
+  const { error } = await supabase.from('rules').delete().eq('id', id);
+  if(error) console.error('removeRule failed:', error.message || error);
 }

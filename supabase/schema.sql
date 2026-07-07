@@ -92,18 +92,25 @@ create table if not exists public.posts (
 );
 create index if not exists posts_space_idx on public.posts (space_id, created_at desc);
 
--- ---- rules : 自分ルール(limit) -------------------------------------------
+-- ---- rules : 自分ルール(limit)。週次振り返り型(Phase 3b-2) --------------------
 create table if not exists public.rules (
-  id         uuid primary key default gen_random_uuid(),
-  owner      uuid not null references public.users(id)  on delete cascade,
-  space_id   uuid not null references public.spaces(id) on delete cascade,
-  emoji      text not null default '🎯',
-  label      text not null,                            -- 「飲みは週2まで」等(絵文字可)
-  total      integer not null default 1,               -- 週あたりの上限/目標回数
-  done       integer not null default 0,               -- 達成カウント
-  pub        boolean not null default true,            -- true=公開 / false=自分だけ
-  created_at timestamptz not null default now()
+  id           uuid primary key default gen_random_uuid(),
+  owner        uuid not null references public.users(id)  on delete cascade,
+  space_id     uuid not null references public.spaces(id) on delete cascade,
+  emoji        text not null default '🎯',
+  label        text not null,                            -- 「飲みは週2まで」等(絵文字可)
+  total        integer not null default 1,               -- (旧)週回数目標。週次振り返り型では未使用・残置
+  done         integer not null default 0,               -- (旧)達成カウント。未使用・残置
+  pub          boolean not null default true,            -- true=公開 / false=自分だけ
+  streak       integer not null default 0,               -- 現在の連続週数
+  streak_best  integer not null default 0,               -- 自己ベスト(切れても残す=ノーシェイム)
+  week_checked boolean not null default false,           -- 今週「守れた」を押したか(連打防止)
+  created_at   timestamptz not null default now()
 );
+-- 既存DB向け冪等マイグレーション(週次振り返り型の3列を追加)。
+alter table public.rules add column if not exists streak       integer not null default 0;
+alter table public.rules add column if not exists streak_best  integer not null default 0;
+alter table public.rules add column if not exists week_checked boolean not null default false;
 create index if not exists rules_space_idx on public.rules (space_id);
 
 -- =============================================================

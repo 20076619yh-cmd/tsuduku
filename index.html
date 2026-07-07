@@ -120,23 +120,19 @@
         <div id="mealSummary"></div>
       </div>
 
-      <!-- self rules (limits) with per-item privacy + add/edit, streak, resist -->
+      <!-- self rules (limits): 週次振り返り型。per-item privacy + streak(自己ベスト併記) -->
       <div class="rounded-2xl bg-card border border-line shadow-card p-4 mt-5">
         <div class="flex items-center justify-between mb-3">
           <p class="text-[13px] font-extrabold text-ink">今週の自分ルール</p>
           <button id="ruleAddBtn" class="rule-add pop text-[11px] font-bold text-accent">＋ ルール追加</button>
         </div>
         <div id="limitList" class="space-y-2"></div>
-        <p class="text-[10px] text-faint mt-2">「達成」で肯定報告（公開時はタイムラインへ）・ 🌐/🔒 で公開範囲 ・ ✕ で削除 ・ 最大3つ</p>
+        <p class="text-[10px] text-faint mt-2">週1回「今週守れた」でそっと肯定（公開時はタイムラインへ）・ 🌐/🔒 で公開範囲 ・ ✕ で削除 ・ 最大3つ</p>
 
-        <div class="flex items-center justify-between mt-4 pt-3.5 border-t border-line">
-          <span class="flex items-center gap-1.5 text-[12px] font-extrabold text-ink">🔥 有言実行 <span class="text-accent" id="streakCount">6</span> 連続</span>
-          <span id="resistCount" class="text-[11px] font-bold text-faint">今週 0回 踏みとどまった</span>
+        <div class="flex items-center gap-1.5 mt-4 pt-3.5 border-t border-line text-[12px] font-extrabold text-ink">
+          🔥 有言実行 <span class="text-accent" id="streakCount">0</span> 連続<span id="streakBest" class="text-faint font-bold ml-1"></span>
         </div>
-        <button class="resist-add pop w-full mt-3 flex items-center justify-center gap-2 text-[13px] font-extrabold text-accent bg-asoft border border-aline rounded-2xl py-3">
-          <span class="text-[15px]">🛡</span>「踏みとどまった」を記録
-        </button>
-        <p class="text-[10px] text-faint text-center mt-2">守れなくても咎めない。できた時だけそっと褒める</p>
+        <p class="text-[10px] text-faint mt-2">守れた週だけそっと積み上がる。守れなかった週は何も残さない（連続が切れても自己ベストは残る）。</p>
       </div>
 
       <div class="h-16"></div><!-- spacer so the fixed 運動開始 bar never covers the last card -->
@@ -178,7 +174,8 @@
           </div>
           <div class="text-center px-1">
             <p class="text-[11px] text-faint font-bold mb-1.5">連続記録</p>
-            <p class="text-[26px] font-extrabold text-accent leading-none"><span id="heroStreak">0</span><span class="text-[12px] text-faint font-bold ml-0.5">日</span></p>
+            <p class="text-[26px] font-extrabold text-accent leading-none"><span id="heroStreak">0</span><span class="text-[12px] text-faint font-bold ml-0.5">週</span></p>
+            <p class="text-[10px] text-faint font-bold mt-1" id="heroStreakBest"></p>
           </div>
           <div class="text-center px-1">
             <p class="text-[11px] text-faint font-bold mb-1.5">体重</p>
@@ -339,9 +336,8 @@
       <button id="ruleCancel" class="pop text-[12px] font-bold text-sub">閉じる</button>
     </div>
     <label class="block text-[11px] font-bold text-faint mb-1.5">ルール</label>
-    <input id="rfLabel" type="text" placeholder="例: 揚げ物は週1まで" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-4">
-    <label class="block text-[11px] font-bold text-faint mb-1.5">週の回数目標（任意）</label>
-    <input id="rfTotal" type="number" inputmode="numeric" placeholder="例: 2" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-1">
+    <input id="rfLabel" type="text" placeholder="例: 揚げ物は週1まで" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-1">
+    <p class="text-[10px] text-faint mt-2 mb-1">週1回ふりかえって「今週守れた」を押すだけ。守れなかった週は何もしない。</p>
     <button id="ruleSave" class="pop w-full mt-3 bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">追加</button>
   </div>
 
