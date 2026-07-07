@@ -766,16 +766,13 @@ function renderProgressHero(){
   const set=(id,v)=>{const el=document.getElementById(id); if(el) el.textContent=v;};
   set('statDays', new Set(doneWk.map(e=>e.date)).size);   // 運動日数=実施済みのみ(予定は数えない)
   set('heroStreak', curStreak());
-  const total=wk.length, done=doneWk.length;   // ring=予定達成率(planned含むtotal), done=実施済み
-  const pct = total ? Math.round(done/total*100) : 0;
-  const ring=document.getElementById('heroRing'); if(ring) ring.setAttribute('stroke-dashoffset', (94.2*(1-pct/100)).toFixed(1));
-  set('heroPct', pct); set('heroCount', `${done}/${total}回`);
+  // 予定達成率リング(%)は廃止=プレッシャーになるため(ノーシェイム)
   const weights=logEntries.filter(e=>e.type==='weight'&&e.who===CURRENT_USER).slice().sort((a,b)=> a.date<b.date?-1:1);
   set('heroWeight', weights.length?weights[weights.length-1].kg:'—');
   const del=document.getElementById('heroWeightDelta');
   if(del){ const d=weightDelta(cutoff); del.textContent=d; del.classList.toggle('text-accent', d.startsWith('▼')); del.classList.toggle('text-faint', !d.startsWith('▼')); }
   const ht=document.getElementById('heroTime'); if(ht) ht.innerHTML=fmtMinHtml(doneWk.reduce((s,e)=>s+durToMin(e.dur),0));
-  const bser=weekBalSeries().filter(x=>x!=null);   // メンテ差分は現状維持(週ベース)
+  const bser=weekBalSeries().filter(x=>x!=null);   // カロリー差分は現状維持(週ベース)
   if(bser.length){ const sum=bser.reduce((a,b)=>a+b,0); set('heroMaint', (sum<=0?'-':'+')+Math.abs(sum/1000).toFixed(1)+'k'); }
   else set('heroMaint','—');
 }
@@ -793,7 +790,7 @@ function maintenanceValue(){ return profile.maintenanceOverride!=null ? profile.
 function renderMaintCaption(){
   const el=document.getElementById('maintCaption'); if(!el) return;
   const note=profile.maintenanceOverride!=null ? '手動補正' : '初期の目安';
-  el.textContent=`0ライン＝メンテ ${maintenanceValue().toLocaleString()}kcal（${note}）`;
+  el.textContent=`0ライン＝維持カロリー ${maintenanceValue().toLocaleString()}kcal（${note}）`;
 }
 function readProfileForm(){
   const ov=parseFloat(document.getElementById('pfOverride').value);
