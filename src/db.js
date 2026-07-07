@@ -6,6 +6,10 @@ import { supabase } from './supabase.js';
 // owner + space resolved once in bootstrap, reused by the write helpers so call sites
 // in main.js stay terse (single space / single user through Phase 3).
 let _uid = null, _spaceId = null;
+// 保存失敗の共通通知(main.jsがトースト表示を登録)。console.error＋UI通知を一箇所に。
+let _onSaveError = null;
+export function setSaveErrorHandler(fn){ _onSaveError = fn; }
+function fail(where, error){ console.error(where + ' failed:', error?.message || error); if(_onSaveError) _onSaveError(); }
 // seconds → display label (mirrors main.js durFromSec so the data layer is self-contained)
 function durLabel(sec){
   if(sec == null) return null;
@@ -143,11 +147,11 @@ function entryToRow(e){
 // upsert = insert-or-overwrite by PK id → editing a row never double-inserts.
 export async function upsertEntry(e){
   const { error } = await supabase.from('entries').upsert(entryToRow(e));
-  if(error) console.error('upsertEntry failed:', error.message || error);
+  if(error) fail('upsertEntry', error);
 }
 export async function removeEntry(id){
   const { error } = await supabase.from('entries').delete().eq('id', id);
-  if(error) console.error('removeEntry failed:', error.message || error);
+  if(error) fail('removeEntry', error);
 }
 
 // posts. 写真は Phase 5(Storage)まで非永続 → photo:null。reactions は DB 既定のまま(非永続)。
@@ -160,7 +164,7 @@ function postToRow(p){
 }
 export async function upsertPost(p){
   const { error } = await supabase.from('posts').upsert(postToRow(p));
-  if(error) console.error('upsertPost failed:', error.message || error);
+  if(error) fail('upsertPost', error);
 }
 
 // rules(日数ストリーク型)。total/done/streak/week_checked/streak_best は本モデルで未使用(DB既定のまま)。
@@ -173,9 +177,9 @@ function ruleToRow(r){
 }
 export async function upsertRule(r){
   const { error } = await supabase.from('rules').upsert(ruleToRow(r));
-  if(error) console.error('upsertRule failed:', error.message || error);
+  if(error) fail('upsertRule', error);
 }
 export async function removeRule(id){
   const { error } = await supabase.from('rules').delete().eq('id', id);
-  if(error) console.error('removeRule failed:', error.message || error);
+  if(error) fail('removeRule', error);
 }

@@ -336,6 +336,11 @@
     <button id="pcClose" class="pop w-full mt-4 text-[13px] font-bold text-sub border border-line rounded-2xl py-3">閉じる</button>
   </div>
 
+  <!-- 保存失敗トースト(自動で消える・ノーシェイム) -->
+  <div id="toast" class="absolute inset-x-0 bottom-24 z-[70] hidden flex justify-center px-6 pointer-events-none">
+    <div class="bg-ink text-white text-[12px] font-bold px-4 py-2.5 rounded-full shadow-lift text-center"></div>
+  </div>
+
   <!-- custom tag (＋その他) 入力シート: 運動開始/予定/投稿で共通。prompt()の置換 -->
   <div id="tagOtherScrim" class="sheet-scrim absolute inset-0 z-[55] hidden"></div>
   <div id="tagOtherSheet" class="sheet absolute inset-x-0 bottom-0 z-[60] bg-card rounded-t-[24px] border-t border-line px-5 pt-3 pb-7">

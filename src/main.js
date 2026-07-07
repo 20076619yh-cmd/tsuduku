@@ -2,7 +2,7 @@
 import './style.css';
 import Chart from 'chart.js/auto';   // auto = same all-controllers registration as the old UMD CDN
 import { supabase } from './supabase.js';
-import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule } from './db.js';
+import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler } from './db.js';
 
 /* ---------- members ---------- */
 // Flat initial state: just me. Friends arrive in the backend/sharing phase (I/I2).
@@ -12,6 +12,16 @@ let members = {
 };
 // First code point (not str[0]) so emoji / surrogate-pair nicknames don't get half-cut.
 function firstCP(s){ return (Array.from((s || '').trim())[0]) || '?'; }
+// 保存失敗の軽いトースト(自動で消える・ノーシェイム)。db.jsの保存系失敗時に共通発火。
+let toastTimer=null;
+function showToast(msg){
+  const el=document.getElementById('toast'); if(!el) return;
+  const inner=el.firstElementChild; if(inner) inner.textContent=msg;
+  el.classList.remove('hidden');
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.classList.add('hidden'), 3500);
+}
+setSaveErrorHandler(()=>showToast('保存に失敗しました。通信を確認してください'));
 // アバターが絵文字頭文字のとき、名前表示から先頭の絵文字を落として二重表示を防ぐ(アバター=頭文字/名前=残り)。
 function isEmoji(ch){ return /\p{Extended_Pictographic}/u.test(ch || ''); }
 function heroDisplayName(nick){
@@ -907,7 +917,7 @@ function saveProfile(){
   if(m){ m.name = profile.nick; m.ini = firstCP(profile.nick); }
   renderIdentity();
   saveProfileRow(CURRENT_USER, profile, maintenanceValue())
-    .catch(err => console.error('profile save failed:', err.message || err));
+    .catch(err => { console.error('profile save failed:', err.message || err); showToast('保存に失敗しました。通信を確認してください'); });
 }
 
 /* ---------- nav + interactions ---------- */
