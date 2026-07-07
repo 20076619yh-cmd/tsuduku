@@ -26,8 +26,8 @@ const tagDot = {
   '肩':'#E0A53A','腕':'#B5836A','有酸素':'#14B87C','ストレッチ':'#5FB6A8','休養':'#9AA09A'
 };
 function avatar(m,size=40){
-  if(m.photo) return `<div style="width:${size}px;height:${size}px;background-image:url('${m.photo}');background-size:cover;background-position:center" class="rounded-full shrink-0"></div>`;
-  return `<div style="width:${size}px;height:${size}px;background:${m.c}" class="rounded-full flex items-center justify-center text-white font-bold shrink-0"><span style="font-size:${Math.round(size*0.4)}px">${m.ini}</span></div>`;
+  if(m.photo) return `<div style="width:${size}px;height:${size}px;background-image:url('${m.photo}');background-size:cover;background-position:center" class="avatar-btn cursor-pointer rounded-full shrink-0"></div>`;
+  return `<div style="width:${size}px;height:${size}px;background:${m.c}" class="avatar-btn cursor-pointer rounded-full flex items-center justify-center text-white font-bold shrink-0"><span style="font-size:${Math.round(size*0.4)}px">${m.ini}</span></div>`;
 }
 function chip(tag,status){
   const dot=tagDot[tag]||'#9AA09A';
@@ -840,6 +840,23 @@ function closeProfile(){
   document.getElementById('profileSheet').classList.remove('open');
   document.getElementById('profileScrim').classList.add('hidden');
 }
+// 閲覧用プロフィールカード(nickname/アバター＋公開ルール最大3つと🔥日数)。今は自分のみ、他人参照はPhase 4。
+function openProfileCard(){
+  const m=members[CURRENT_USER]||{};
+  applyAvatarEl(document.getElementById('pcAvatar'), m);
+  const nm=document.getElementById('pcName'); if(nm) nm.textContent=m.name||'';
+  const pub=limits.filter(l=>l.pub).slice(0,3);
+  const el=document.getElementById('pcRules');
+  if(el) el.innerHTML = pub.length
+    ? pub.map(l=>`<div class="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2"><span class="text-[14px]">${l.emoji}</span><span class="flex-1 text-[13px] font-bold text-ink truncate">${l.label}</span>${l.streakStart?`<span class="text-[11px] font-extrabold text-accent whitespace-nowrap">🔥${ruleStreak(l)}日目</span>`:''}</div>`).join('')
+    : `<p class="text-[12px] text-faint text-center py-3">公開中の自分ルールはありません</p>`;
+  document.getElementById('pcScrim').classList.remove('hidden');
+  document.getElementById('pcSheet').classList.add('open');
+}
+function closeProfileCard(){
+  document.getElementById('pcSheet').classList.remove('open');
+  document.getElementById('pcScrim').classList.add('hidden');
+}
 // nick is the single source of truth for display name + avatar initial (header + 記録 hero).
 // 画像があれば画像、無ければ頭文字(ヘッダ・記録ヒーロー・プロフィールシート共通)
 function applyAvatarEl(el, m){ if(!el || !m) return;
@@ -902,7 +919,9 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#ruleXEnd')) endRule();
   if(e.target.closest('#ruleXCancel')||e.target.closest('#ruleXScrim')) closeRuleX();
   if(e.target.closest('.meal-add')) openSheet('meal', TODAY);   // 本日の食事カード → TODAY固定
-  const eedit=e.target.closest('.entry-edit'); if(eedit) openSheetEdit(eedit.dataset.id);
+  if(e.target.closest('.avatar-btn')) openProfileCard();   // アバタータップ→プロフィールカード(自分)
+  if(e.target.closest('#pcClose')||e.target.closest('#pcScrim')) closeProfileCard();
+  const eedit=e.target.closest('.entry-edit'); if(eedit && !e.target.closest('.avatar-btn')) openSheetEdit(eedit.dataset.id);
   if(e.target.closest('#sheetDelete')) deleteEntry();
   if(e.target.closest('.rule-add')) openRule();
   if(e.target.closest('#ruleSave')) saveRule();

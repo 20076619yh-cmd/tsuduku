@@ -154,7 +154,7 @@
       <!-- YOU first: clean big numbers -->
       <div class="rounded-2xl bg-card border border-line shadow-card p-5 mb-3">
         <div class="flex items-center gap-2.5 mb-4">
-          <div id="heroAvatar" class="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[13px]" style="background:#14B87C">ボ</div>
+          <div id="heroAvatar" class="avatar-btn cursor-pointer w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[13px]" style="background:#14B87C">ボ</div>
           <p id="heroName" class="text-[13px] font-bold text-sub">ぼーいの今週</p>
         </div>
         <div class="grid grid-cols-3 divide-x divide-line">
@@ -321,6 +321,19 @@
     <p class="text-[10px] text-faint mb-3 leading-relaxed">※式は個人で±200〜400kcalずれ得る初期の目安。将来は体重×カロリー実データで補正予定。認証・保存は別フェーズ。</p>
     <button id="profileSave" class="pop w-full bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">保存</button>
     <button id="logoutBtn" class="pop w-full mt-2 text-[13px] font-bold text-sub border border-line rounded-2xl py-3">ログアウト</button>
+  </div>
+
+  <!-- profile CARD (閲覧用・アバタータップ)。他人参照はPhase 4で結線 -->
+  <div id="pcScrim" class="sheet-scrim absolute inset-0 z-40 hidden"></div>
+  <div id="pcSheet" class="sheet absolute inset-x-0 bottom-0 z-50 bg-card rounded-t-[24px] border-t border-line px-5 pt-3 pb-7">
+    <div class="w-10 h-1 rounded-full bg-line mx-auto mb-4"></div>
+    <div class="flex flex-col items-center mb-4">
+      <div id="pcAvatar" class="w-16 h-16 rounded-full flex items-center justify-center text-white font-extrabold text-[24px]" style="background:#14B87C"></div>
+      <p id="pcName" class="text-[15px] font-extrabold text-ink mt-2"></p>
+    </div>
+    <p class="text-[11px] font-bold text-faint mb-2">公開中の自分ルール</p>
+    <div id="pcRules" class="space-y-2"></div>
+    <button id="pcClose" class="pop w-full mt-4 text-[13px] font-bold text-sub border border-line rounded-2xl py-3">閉じる</button>
   </div>
 
   <!-- add self-rule sheet (mock) -->
