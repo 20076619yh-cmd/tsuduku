@@ -876,14 +876,15 @@ function closeSettings(){ document.getElementById('settingsSheet').classList.rem
 // target=対象のCSSセレクタ(nullは中央表示)。文言は後で磨く前提のドラフト。
 // 6ステップ確定版。文言はプロダクトオーナー(開発者本人)指定を一字一句そのまま表示する。
 // AI側でタイトル等の文言を追加・整形しない(本文=指定テキストのみ・「使い方をもう一度見る」でも同一)。
-// pos=吹き出しの固定位置(center/top/bottom)。実UI要素には一切触れない・イベントを発火させない。
+// page=表示する画面(showPageを呼ぶだけ)。pos=吹き出しの固定位置(center/top/bottom)。
+// 画面切替以外は実UI要素に一切触れない(ハイライト・自動スクロール・クリック発火なし=シート誤起動を防止)。
 const TOUR_STEPS=[
-  { pos:'center', b:'fit tree は「運動の絵日記」。焦らず、あなたのペースで、そっと積み上げるアプリです！' },
-  { pos:'top',    b:'宣言をして予定を入れよう！' },
-  { pos:'bottom', b:'予定を入れたら指定の時間に運動開始をして、運動をスタート！' },
-  { pos:'bottom', b:'タイムラインに自分が運動した記録が残り、みんなが見ることができます！' },
-  { pos:'bottom', b:'そして自分の運動の記録はタイムラインと、記録に蓄積されていきます！' },
-  { pos:'center', b:'一緒にあなただけの運動の記録を育てていきましょう！' },
+  { page:'schedule', pos:'center', b:'fit tree は「運動の絵日記」。焦らず、あなたのペースで、そっと積み上げるアプリです！' },
+  { page:'schedule', pos:'top',    b:'宣言をして予定を入れよう！' },
+  { page:'schedule', pos:'bottom', b:'予定を入れたら指定の時間に運動開始をして、運動をスタート！' },
+  { page:'feed',     pos:'bottom', b:'タイムラインに自分が運動した記録が残り、みんなが見ることができます！' },
+  { page:'progress', pos:'bottom', b:'そして自分の運動の記録はタイムラインと、記録に蓄積されていきます！' },
+  { page:null,       pos:'center', b:'一緒にあなただけの運動の記録を育てていきましょう！' },
 ];
 let tourIdx=0, tourOpen=false;
 function placeTourCard(pos){
@@ -898,6 +899,7 @@ function placeTourCard(pos){
 }
 function renderTourStep(){
   const s=TOUR_STEPS[tourIdx]; if(!s) return;
+  if(s.page) showPage(s.page);   // 画面切替(タブ遷移)だけ行う。要素には触れない
   document.getElementById('tourStepNo').textContent=`${tourIdx+1} / ${TOUR_STEPS.length}`;
   document.getElementById('tourTitle').textContent='';   // AIタイトルは付けない(指定本文のみ)
   document.getElementById('tourBody').textContent=s.b;    // プロダクトオーナー指定を一字一句
@@ -908,6 +910,7 @@ function openTour(){ tourOpen=true; tourIdx=0; document.getElementById('tourOver
 function endTour(){
   tourOpen=false;
   document.getElementById('tourOverlay').classList.add('hidden');
+  showPage('schedule');   // 終了/スキップ時は予定画面に戻す
   if(members[CURRENT_USER]) markTourDone(CURRENT_USER);   // 完了を保存(次回は出さない)
 }
 function tourNext(){ if(tourIdx>=TOUR_STEPS.length-1){ endTour(); } else { tourIdx++; renderTourStep(); } }
