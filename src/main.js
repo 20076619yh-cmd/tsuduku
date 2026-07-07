@@ -203,16 +203,28 @@ function reactBtn(i,key,emo,n){
 /* ---------- SCHEDULE (type-tagged log · week/month · bottom sheet) ---------- */
 let CURRENT_USER='boy';   // replaced with session.user.id in bootstrap (initApp)
 let SPACE_ID=null;        // the personal space id resolved in bootstrap
-const TODAY='2026-06-20';
-let selectedDate=TODAY;
-let schedView='week';
-let calCursor={y:2026, m:5};            // 0-based month (5 = June)
-const WD=['月','火','水','木','金','土','日'];   // Monday-first
-
 // pure 'YYYY-MM-DD' helpers (built from parts to avoid timezone drift)
 function ymd(y,m,d){ return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
 function parseYmd(s){ const [y,m,d]=s.split('-').map(Number); return {y,m:m-1,d}; }
 function wdIndex(s){ const {y,m,d}=parseYmd(s); return (new Date(y,m,d).getDay()+6)%7; } // Mon=0
+// 端末ローカルの実日付 → 'YYYY-MM-DD'。日付が変われば「本日」も自動で進む。
+function todayStr(){ const n=new Date(); return ymd(n.getFullYear(), n.getMonth(), n.getDate()); }
+
+let TODAY=todayStr();                    // 実日付(起動時)。ハードコード廃止
+let selectedDate=TODAY;
+let schedView='week';
+let calCursor={ y:parseYmd(TODAY).y, m:parseYmd(TODAY).m };
+const WD=['月','火','水','木','金','土','日'];   // Monday-first
+
+// 日本の祝日: 2026-2027 をハードコード(春分/秋分は近似)。自動算出・毎年更新は将来(TODO)。
+const JP_HOLIDAYS=new Set([
+  '2026-01-01','2026-01-12','2026-02-11','2026-02-23','2026-03-20','2026-04-29','2026-05-03','2026-05-04','2026-05-05','2026-05-06','2026-07-20','2026-08-11','2026-09-21','2026-09-22','2026-09-23','2026-10-12','2026-11-03','2026-11-23',
+  '2027-01-01','2027-01-11','2027-02-11','2027-02-23','2027-03-21','2027-04-29','2027-05-03','2027-05-04','2027-05-05','2027-07-19','2027-08-11','2027-09-20','2027-09-23','2027-10-11','2027-11-03','2027-11-23',
+]);
+function isHoliday(s){ return JP_HOLIDAYS.has(s); }
+// 曜日色: 土=青系/日・祝=赤系(faintに)。null=平日(既定色)。警告ではなく示唆(ノーシェイム)。
+function dowColor(s){ const wi=wdIndex(s); if(wi===6||isHoliday(s)) return '#D9686B'; if(wi===5) return '#3E86C9'; return null; }
+
 function fmtLabel(s){
   if(s===TODAY) return 'きょうの予定';
   const {m,d}=parseYmd(s);
@@ -220,25 +232,36 @@ function fmtLabel(s){
   return s<TODAY ? `${txt} の記録` : `${txt} の予定`;
 }
 
-// real Monday-first week containing TODAY (2026-06-20 = Sat) → Mon 15 … Sun 21
-const week = [
-  {d:'月',date:'2026-06-15'},{d:'火',date:'2026-06-16'},{d:'水',date:'2026-06-17'},
-  {d:'木',date:'2026-06-18'},{d:'金',date:'2026-06-19'},{d:'土',date:'2026-06-20'},{d:'日',date:'2026-06-21'}
-];
+// Monday-first week containing an anchor date, computed from real dates.
+function buildWeek(anchor){
+  const {y,m,d}=parseYmd(anchor);
+  const dow=(new Date(y,m,d).getDay()+6)%7;           // Mon=0
+  const mon=new Date(y,m,d-dow);
+  return Array.from({length:7},(_,i)=>{
+    const dt=new Date(mon.getFullYear(),mon.getMonth(),mon.getDate()+i);
+    return { d:WD[i], date:ymd(dt.getFullYear(),dt.getMonth(),dt.getDate()) };
+  });
+}
+let week=buildWeek(TODAY);
 function renderWeek(){
+  // 週がまたぐ月を faint 表示(例「6月」/「6・7月」)
+  const wm=document.getElementById('weekMonth');
+  if(wm){ const ms=[...new Set(week.map(w=>parseYmd(w.date).m+1))]; wm.textContent=ms.join('・')+'月'; }
   document.getElementById('weekStrip').innerHTML = week.map(w=>{
     const sel=w.date===selectedDate, isToday=w.date===TODAY;
     const {d:dd}=parseYmd(w.date);
     const has=logEntries.some(e=>e.type==='workout'&&e.date===w.date);
+    const dc=dowColor(w.date);   // 土=青/日祝=赤(faint)。sel/today は teal 優先
     // teal language: selected=teal fill, today=teal ring + "今日" mark (both distinguishable)
     const cardCls = sel?'bg-accent border-accent':(isToday?'bg-card border-accent':'bg-card border-line');
-    const labelCls = sel?'text-white/80':(isToday?'text-accent':'text-faint');
+    const labelCls = sel?'text-white/80':(isToday?'text-accent':(dc?'':'text-faint'));
+    const labelStyle = (!sel&&!isToday&&dc)?`style="color:${dc}"`:'';
     const numCls = sel?'text-white':(isToday?'text-accent':'text-ink');
     const marker = isToday
       ? `<span class="text-[8px] font-extrabold leading-none ${sel?'text-white/90':'text-accent'}">今日</span>`
       : `<span class="w-1 h-1 rounded-full ${has?(sel?'bg-white/70':'bg-accent'):(sel?'bg-white/40':'bg-line')}"></span>`;
     return `<button class="day-pill pop w-full py-3 rounded-2xl flex flex-col items-center gap-1.5 border ${cardCls}" data-date="${w.date}">
-      <span class="text-[11px] font-bold ${labelCls}">${w.d}</span>
+      <span class="text-[11px] font-bold ${labelCls}" ${labelStyle}>${w.d}</span>
       <span class="text-[16px] font-extrabold ${numCls}">${dd}</span>
       <span class="h-2.5 flex items-center">${marker}</span>
     </button>`;
@@ -327,11 +350,13 @@ function renderMonth(){
     const dayTags=logEntries.filter(e=>e.type==='workout'&&e.date===ds).flatMap(e=>e.tags||[]);
     const dots=dayTags.slice(0,3).map(t=>`<span class="w-1.5 h-1.5 rounded-full" style="background:${tagDot[t]||'#9AA09A'}"></span>`).join('');
     const more=dayTags.length>3?`<span class="text-[8px] font-bold text-faint leading-none">+${dayTags.length-3}</span>`:'';
+    const dc=dowColor(ds);   // 土=青/日祝=赤(faint)。sel/today は teal 優先
     const numCls = sel
       ? (isToday?'bg-accent text-white ring-2 ring-aline':'bg-accent text-white')
-      : (isToday?'text-accent ring-1 ring-accent':'text-ink');
+      : (isToday?'text-accent ring-1 ring-accent':(dc?'':'text-ink'));
+    const numStyle=(!sel&&!isToday&&dc)?`style="color:${dc}"`:'';
     cells+=`<button class="mcell pop flex flex-col items-center gap-1 py-1" data-date="${ds}">
-      <span class="w-7 h-7 flex items-center justify-center rounded-full text-[12px] font-bold ${numCls}">${d}</span>
+      <span class="w-7 h-7 flex items-center justify-center rounded-full text-[12px] font-bold ${numCls}" ${numStyle}>${d}</span>
       <span class="flex items-center gap-0.5 h-2">${dots}${more}</span>
     </button>`;
   }

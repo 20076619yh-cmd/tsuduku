@@ -78,6 +78,7 @@
         <button class="vseg text-[12px] font-bold px-4 py-1.5 rounded-full text-sub" data-vview="month">月</button>
       </div>
 
+      <p id="weekMonth" class="text-[11px] font-bold text-faint mb-1.5 ml-0.5"></p>
       <div id="weekStrip" class="grid grid-cols-7 gap-1.5 mb-5"></div>
 
       <!-- month calendar (toggles with week; Monday-first) -->
@@ -93,8 +94,8 @@
           <span class="text-[10px] font-bold text-faint">水</span>
           <span class="text-[10px] font-bold text-faint">木</span>
           <span class="text-[10px] font-bold text-faint">金</span>
-          <span class="text-[10px] font-bold text-faint">土</span>
-          <span class="text-[10px] font-bold text-faint">日</span>
+          <span class="text-[10px] font-bold" style="color:#3E86C9">土</span>
+          <span class="text-[10px] font-bold" style="color:#D9686B">日</span>
         </div>
         <div id="monthGrid" class="grid grid-cols-7 gap-y-1"></div>
         <!-- inline detail for the tapped day (no navigation) -->
