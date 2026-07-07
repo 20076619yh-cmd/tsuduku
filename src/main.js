@@ -57,7 +57,7 @@ let timerRunning=false, timerSec=0, timerInterval=null, timerTags=[];
 let timerFromPlan=false;    // true=今日の予定から開始（既存エントリを更新）／false=予定なし開始（新規追加）
 let activeEntryIds=[];      // タイマー作動中に「実施中」表示する予定エントリのid(UI専用・非永続)
 let startTags=[];           // category-select (no-plan start)
-let pendingPhoto=null, postCtx=null;
+let pendingPhoto=null, postCtx=null, postTags=[];
 const START_CATS=['胸トレ','背中','脚','肩','腕','有酸素','ストレッチ'];
 function fmtTimer(s){ return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
 function durFromSec(s){ const min=Math.max(1,Math.round(s/60)); if(min<60) return `${min}分`; const h=Math.floor(min/60), mm=min%60; return mm?`${h}時間${mm}分`:`${h}時間`; }
@@ -113,9 +113,18 @@ function onStopWorkout(){
   // (2) open the share (post) flow with the same tags + measured time
   openPostSheet(timerTags, dur, durSec);
 }
+function renderPostTags(){
+  const el=document.getElementById('psTags'); if(!el) return;
+  // 予定/タイマーの部位を初期選択。ジムで変わることがあるので選び直せる(＋その他も可)
+  const list=[...SHEET_TAGS, ...postTags.filter(t=>!SHEET_TAGS.includes(t))];
+  el.innerHTML=list.map(t=>
+    `<button class="ps-tag pop text-[11px] font-bold px-3 py-1.5 rounded-full border ${postTags.includes(t)?'sel':'border-line text-ink bg-card'}" data-tag="${t}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style="background:${tagDot[t]||'#9AA09A'}"></span>${t}</button>`
+  ).join('')
+    + `<button class="ps-tag-other pop text-[11px] font-bold px-3 py-1.5 rounded-full border border-dashed border-line text-sub bg-card">＋その他</button>`;
+}
 function openPostSheet(tags, dur, durSec){
-  pendingPhoto=null; postCtx={tags:(tags||[]).slice(), dur, durSec};
-  document.getElementById('psTags').innerHTML=(tags||[]).map(t=>chip(t)).join('');
+  pendingPhoto=null; postCtx={dur, durSec};
+  postTags=(tags||[]).slice(); renderPostTags();
   document.getElementById('psDur').textContent='実施 '+dur;
   document.getElementById('psPhotoPreview').innerHTML='';
   document.getElementById('psText').value='';
@@ -133,7 +142,7 @@ function handlePhoto(file){
 function submitPost(){
   if(!postCtx) return;
   const text=document.getElementById('psText').value.trim();
-  addPost(createPost({kind:'workout', who:CURRENT_USER, tags:postCtx.tags, dur:postCtx.dur, durSec:postCtx.durSec, photo:pendingPhoto, text, scope:'group'}));
+  addPost(createPost({kind:'workout', who:CURRENT_USER, tags:postTags.slice(), dur:postCtx.dur, durSec:postCtx.durSec, photo:pendingPhoto, text, scope:'group'}));
   postCtx=null; pendingPhoto=null;
   closePostSheet();
   showPage('feed');
@@ -181,6 +190,7 @@ function renderFeed(){
       </div>
       ${imgBlock}
       ${body}
+      ${ruleFooter(p)}
       <div class="flex gap-2 px-4 py-3">
         ${reactBtn(i,'fire','🔥',p.r.fire)}
         ${reactBtn(i,'muscle','💪',p.r.muscle)}
@@ -191,6 +201,12 @@ function renderFeed(){
 }
 function reactBtn(i,key,emo,n){
   return `<button class="react pop flex items-center gap-1.5 border border-line bg-card px-3 py-1.5 rounded-full text-[13px] font-bold text-sub" data-i="${i}" data-k="${key}"><span>${emo}</span><span class="cnt">${n}</span></button>`;
+}
+// 投稿カード下部に継続中の公開ルールを小さく併記(公開のみ・日数のみ・独立スレッドにしない=タイムラインをシンプルに)
+function ruleFooter(p){
+  if(p.who!==CURRENT_USER) return '';   // 今は自分のみ。他人の投稿への併記は Phase 4
+  const r=limits.filter(l=>l.pub&&l.streakStart).sort((a,b)=>ruleStreak(b)-ruleStreak(a))[0];
+  return r ? `<div class="px-4 pb-2 -mt-0.5"><span class="text-[11px] font-bold text-accent">🔥 ${r.label} ${ruleStreak(r)}日目</span></div>` : '';
 }
 
 /* ---------- SCHEDULE (type-tagged log · week/month · bottom sheet) ---------- */
@@ -898,6 +914,9 @@ document.addEventListener('click',e=>{
   if(e.target.closest('.start-tag-other')){ const t=(prompt('部位・メニュー名を入力')||'').trim(); if(t && !startTags.includes(t)) startTags.push(t); renderStartTags(); }
   if(e.target.closest('#startGo')) onStartGo();
   if(e.target.closest('#startCancel')||e.target.closest('#startScrim')) closeStartSheet();
+  const ptag=e.target.closest('.ps-tag');
+  if(ptag){ const t=ptag.dataset.tag; const i=postTags.indexOf(t); if(i>=0) postTags.splice(i,1); else postTags.push(t); renderPostTags(); }
+  if(e.target.closest('.ps-tag-other')){ const t=(prompt('部位・メニュー名を入力')||'').trim(); if(t && !postTags.includes(t)) postTags.push(t); renderPostTags(); }
   if(e.target.closest('#postSubmit')) submitPost();
   if(e.target.closest('#postCancel')||e.target.closest('#postScrim')) closePostSheet();
   const day=e.target.closest('.day-pill');
