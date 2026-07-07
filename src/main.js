@@ -876,44 +876,37 @@ function closeSettings(){ document.getElementById('settingsSheet').classList.rem
 // target=対象のCSSセレクタ(nullは中央表示)。文言は後で磨く前提のドラフト。
 // 6ステップ確定版。文言はプロダクトオーナー(開発者本人)指定を一字一句そのまま表示する。
 // AI側でタイトル等の文言を追加・整形しない(本文=指定テキストのみ・「使い方をもう一度見る」でも同一)。
+// pos=吹き出しの固定位置(center/top/bottom)。実UI要素には一切触れない・イベントを発火させない。
 const TOUR_STEPS=[
-  { page:'schedule', target:null, b:'fit tree は「運動の絵日記」。焦らず、あなたのペースで、そっと積み上げるアプリです！' },
-  { page:'schedule', target:'.declare-btn', b:'宣言をして予定を入れよう！' },
-  { page:'schedule', target:'#startBar', b:'予定を入れたら指定の時間に運動開始をして、運動をスタート！' },
-  { page:'feed',     target:'.nav-btn[data-page="feed"]', b:'タイムラインに自分が運動した記録が残り、みんなが見ることができます！' },
-  { page:'progress', target:'.nav-btn[data-page="progress"]', b:'そして自分の運動の記録はタイムラインと、記録に蓄積されていきます！' },
-  { page:'schedule', target:null, b:'一緒にあなただけの運動の記録を育てていきましょう！' },
+  { pos:'center', b:'fit tree は「運動の絵日記」。焦らず、あなたのペースで、そっと積み上げるアプリです！' },
+  { pos:'top',    b:'宣言をして予定を入れよう！' },
+  { pos:'bottom', b:'予定を入れたら指定の時間に運動開始をして、運動をスタート！' },
+  { pos:'bottom', b:'タイムラインに自分が運動した記録が残り、みんなが見ることができます！' },
+  { pos:'bottom', b:'そして自分の運動の記録はタイムラインと、記録に蓄積されていきます！' },
+  { pos:'center', b:'一緒にあなただけの運動の記録を育てていきましょう！' },
 ];
-let tourIdx=0, tourHi=null;
-function clearTourHighlight(){ if(tourHi){ tourHi.style.boxShadow=''; tourHi.style.borderRadius=''; tourHi=null; } }
-function placeTourCard(sel){
+let tourIdx=0, tourOpen=false;
+function placeTourCard(pos){
   const card=document.getElementById('tourCard'); if(!card) return;
-  clearTourHighlight();
-  const el = sel ? document.querySelector(sel) : null;
-  if(!el){ card.style.top='34%'; return; }                 // 中央付近(welcome/締め)
-  el.scrollIntoView({ block:'center' });
-  tourHi=el; el.style.boxShadow='0 0 0 3px #14B87C'; el.style.borderRadius='14px';
-  requestAnimationFrame(()=>{
-    const app=document.getElementById('app').getBoundingClientRect();
-    const r=el.getBoundingClientRect();
-    const cardH=card.offsetHeight||170;
-    let top=r.bottom-app.top+12;                            // まず対象の下に
-    if(top+cardH > app.height-12) top=r.top-app.top-cardH-12; // 収まらなければ上に
-    card.style.top=Math.max(12, Math.min(top, app.height-cardH-12))+'px';
-  });
+  const h=document.getElementById('app').getBoundingClientRect().height;
+  const ch=card.offsetHeight||160;
+  let top;
+  if(pos==='top') top=Math.round(h*0.12);
+  else if(pos==='bottom') top=Math.round(h-ch-96);   // 下部ナビを避ける
+  else top=Math.round((h-ch)/2);                       // center
+  card.style.top=Math.max(12, top)+'px';
 }
 function renderTourStep(){
   const s=TOUR_STEPS[tourIdx]; if(!s) return;
-  if(s.page) showPage(s.page);
   document.getElementById('tourStepNo').textContent=`${tourIdx+1} / ${TOUR_STEPS.length}`;
   document.getElementById('tourTitle').textContent='';   // AIタイトルは付けない(指定本文のみ)
   document.getElementById('tourBody').textContent=s.b;    // プロダクトオーナー指定を一字一句
   document.getElementById('tourNext').textContent = tourIdx===TOUR_STEPS.length-1 ? 'はじめる' : '次へ';
-  setTimeout(()=>placeTourCard(s.target), 60);   // showPage/描画後に位置決め
+  setTimeout(()=>placeTourCard(s.pos), 30);              // 描画後に高さ確定→位置決め
 }
-function openTour(){ tourIdx=0; document.getElementById('tourOverlay').classList.remove('hidden'); renderTourStep(); }
+function openTour(){ tourOpen=true; tourIdx=0; document.getElementById('tourOverlay').classList.remove('hidden'); renderTourStep(); }
 function endTour(){
-  clearTourHighlight();
+  tourOpen=false;
   document.getElementById('tourOverlay').classList.add('hidden');
   if(members[CURRENT_USER]) markTourDone(CURRENT_USER);   // 完了を保存(次回は出さない)
 }
@@ -982,6 +975,8 @@ function showPage(id){
 document.querySelectorAll('.nav-btn').forEach(b=> b.addEventListener('click',()=>showPage(b.dataset.page)));
 
 document.addEventListener('click',e=>{
+  // ツアー表示中は「次へ/スキップ」以外のクリックを全遮断(背面UIの誤操作・シート誤起動を根絶)
+  if(tourOpen){ if(e.target.closest('#tourNext')) tourNext(); else if(e.target.closest('#tourSkip')) endTour(); return; }
   const r=e.target.closest('.react');
   if(r){
     const cnt=r.querySelector('.cnt');
@@ -1072,8 +1067,7 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#settingsClose')||e.target.closest('#settingsScrim')) closeSettings();
   if(e.target.closest('#settingsTour')){ closeSettings(); openTour(); }
   if(e.target.closest('#settingsLogout')){ closeSettings(); supabase.auth.signOut(); }
-  if(e.target.closest('#tourNext')) tourNext();
-  if(e.target.closest('#tourSkip')) endTour();
+  // #tourNext/#tourSkip はツアー中のみ存在し、上部のガードで処理する
 });
 // live maintenance preview while editing the profile sheet
 document.addEventListener('input', e=>{ if(e.target.closest('#profileSheet')) updateProfilePreview(); });
