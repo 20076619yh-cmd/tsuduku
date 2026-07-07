@@ -55,6 +55,7 @@ function addPost(p){ posts.unshift(p); renderFeed(); upsertPost(p); }
 /* ---------- workout timer (E2) + post flow (E) ---------- */
 let timerRunning=false, timerSec=0, timerInterval=null, timerTags=[];
 let timerFromPlan=false;    // true=今日の予定から開始（既存エントリを更新）／false=予定なし開始（新規追加）
+let activeEntryIds=[];      // タイマー作動中に「実施中」表示する予定エントリのid(UI専用・非永続)
 let startTags=[];           // category-select (no-plan start)
 let pendingPhoto=null, postCtx=null;
 const START_CATS=['胸トレ','背中','脚','肩','腕','有酸素','ストレッチ'];
@@ -79,7 +80,7 @@ function startTimer(tags){
 function onStartWorkout(){
   const todays=logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&e.date===TODAY);
   const tags=[...new Set(todays.flatMap(e=>e.tags||[]))];
-  if(tags.length){ timerFromPlan=true; startTimer(tags); }
+  if(tags.length){ timerFromPlan=true; activeEntryIds=todays.map(e=>e.id); startTimer(tags); renderDayList(); }
   else { timerFromPlan=false; startTags=[]; renderStartTags(); document.getElementById('startScrim').classList.remove('hidden'); document.getElementById('startSheet').classList.add('open'); }
 }
 function closeStartSheet(){ document.getElementById('startSheet').classList.remove('open'); document.getElementById('startScrim').classList.add('hidden'); }
@@ -95,6 +96,7 @@ function onStartGo(){ if(!startTags.length) return; timerFromPlan=false; closeSt
 function onStopWorkout(){
   if(timerInterval) clearInterval(timerInterval);
   timerRunning=false;
+  activeEntryIds=[];   // 実施中→実施済みへ遷移
   const durSec=timerSec;
   const dur=durFromSec(timerSec);
   renderStartBar();
@@ -297,6 +299,8 @@ const planStat = {
 };
 function workoutCard(p){
   const m=members[p.who]; const s=planStat[p.status]||planStat.planned;
+  const active = timerRunning && activeEntryIds.includes(p.id);   // タイマー作動中=実施中
+  const timeTxt = /^\d{1,2}:\d{2}$/.test(p.time||'') ? `予定 ${p.time}` : '予定';   // HH:mm のときだけ時刻
   const sh=memberShare[p.who]||{};
   const wtLine = sh.wt ? `<span class="text-[11px] font-bold ${sh.wt.startsWith('▼')?'text-accent':'text-sub'}">${sh.wt}</span>` : '';
   return `<div class="entry-edit pop cursor-pointer flex items-center gap-3 rounded-2xl bg-card border border-line shadow-card p-3.5 ${s.dim?'opacity-60':''}" data-id="${p.id}">
@@ -305,10 +309,12 @@ function workoutCard(p){
       <div class="flex flex-wrap items-center gap-1.5">
         <span class="text-[14px] font-extrabold text-ink">${m.name}</span>${(p.tags||[]).map(t=>chip(t)).join('')}
       </div>
-      <p class="text-[11px] text-faint mt-1">予定 ${p.time}${p.note?` ・ <span class="font-bold text-[#E0A53A]">${p.note}</span>`:''}</p>
+      <p class="text-[11px] text-faint mt-1">${timeTxt}${p.note?` ・ <span class="font-bold text-[#E0A53A]">${p.note}</span>`:''}</p>
     </div>
     <div class="flex flex-col items-end gap-1">
-      <span class="flex items-center gap-1.5 text-[12px] font-bold ${s.cls}"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.label}</span>
+      ${active
+        ? `<span class="flex items-center gap-1.5 text-[12px] font-extrabold text-accent"><span class="w-1.5 h-1.5 rounded-full bg-accent animate-pulse"></span>🏃 トレーニング中</span>`
+        : `<span class="flex items-center gap-1.5 text-[12px] font-bold ${s.cls}"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.label}</span>`}
       ${wtLine}
     </div>
   </div>`;
