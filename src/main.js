@@ -874,15 +874,10 @@ function openSettings(){ closeProfile(); document.getElementById('settingsScrim'
 function closeSettings(){ document.getElementById('settingsSheet').classList.remove('open'); document.getElementById('settingsScrim').classList.add('hidden'); }
 // 初回オンボーディングツアー。各ステップで対象要素をハイライトし、その近くに吹き出しを出す。
 // target=対象のCSSセレクタ(nullは中央表示)。文言は後で磨く前提のドラフト。
+// 最小2ステップ: ①ようこそ → ②最初の一歩(＋宣言する を指す)で終了。行動を促して閉じる。
 const TOUR_STEPS=[
-  { page:null,       target:null, t:'ようこそ 🌱', b:'fit tree は「運動の絵日記」。焦らず、あなたのペースで、そっと積み上げるアプリです。' },
-  { page:'schedule', target:'.nav-btn[data-page="schedule"]', t:'① 予定タブ', b:'ここは「入力する場所」。きょう誰が何をするかを先に宣言して、続けやすくします。' },
-  { page:'schedule', target:'.day-add', t:'② 予定の入れ方', b:'「＋追記」で宣言。運動の部位（複数OK）と時間を選ぶだけ。体重や食事もここから入力します。' },
-  { page:'schedule', target:'#startBar', t:'③ 運動開始バー', b:'押すとタイマーがスタート。終わると、その記録をそのままタイムラインに投稿できます。' },
-  { page:'schedule', target:'#ruleAddBtn', t:'④ 自分ルール', b:'「甘いものを食べない」等を植えて育てます。破らない限り毎日そっと積み上がり、破っても責めません。' },
-  { page:'feed',     target:'.nav-btn[data-page="feed"]', t:'⑤ タイムライン', b:'みんなの頑張りが流れる場所。🔥💪👏 で気軽に応援し合えます。' },
-  { page:'progress', target:'.nav-btn[data-page="progress"]', t:'⑥ 記録', b:'週と月で振り返る場所。運動日数・連続記録・体重とカロリー差分を、大きな数字でやさしく。' },
-  { page:'schedule', target:null, t:'それでは、はじめましょう 🌱', b:'焦らなくて大丈夫。あなたのペースで、そっと積み上げていきましょう。' },
+  { page:'schedule', target:null, t:'ようこそ 🌱', b:'fit tree は「運動の絵日記」。焦らず、あなたのペースで、そっと積み上げるアプリです。' },
+  { page:'schedule', target:'.declare-btn', t:'宣言をして予定を入れよう！', b:'まずはここから。「＋宣言する」で、きょう何をするかを先に決めます。これが最初の一歩です。' },
 ];
 let tourIdx=0, tourHi=null;
 function clearTourHighlight(){ if(tourHi){ tourHi.style.boxShadow=''; tourHi.style.borderRadius=''; tourHi=null; } }
