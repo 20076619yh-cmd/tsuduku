@@ -102,6 +102,15 @@ export async function saveProfileRow(userId, profile, maintenanceKcal){
   if(error) throw error;
 }
 
+// Phase 4a: 公開プロフィール(安全な窓)。他人に見せてよい最小限(id/nickname/photo)だけ。
+// selectは同スペースのメンバーに限定(ビュー側で is_space_member 判定)・anon非公開。
+// 生の体重/体脂肪/身長/メンテ/設定は含まれない。今は自分の行のみ返る。
+export async function loadPublicProfiles(){
+  const { data, error } = await supabase.from('public_profiles').select('id, nickname, photo');
+  if(error){ console.error('loadPublicProfiles failed:', error.message || error); return []; }
+  return data || [];
+}
+
 // Read every row visible in the space and map to the app's in-memory shapes.
 // Empty in Phase 3a; write-back (and dur_sec ↔ label reconciliation) finalizes in 3b.
 export async function loadAll(spaceId){

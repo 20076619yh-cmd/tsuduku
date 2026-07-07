@@ -2,7 +2,7 @@
 import './style.css';
 import Chart from 'chart.js/auto';   // auto = same all-controllers registration as the old UMD CDN
 import { supabase } from './supabase.js';
-import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler, markTourDone } from './db.js';
+import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler, markTourDone, loadPublicProfiles } from './db.js';
 
 /* ---------- members ---------- */
 // Flat initial state: just me. Friends arrive in the backend/sharing phase (I/I2).
@@ -1086,6 +1086,10 @@ async function initApp(session){
     CURRENT_USER=userId; SPACE_ID=spaceId;
     Object.assign(profile, profileFromRow(urow));
     members = { [CURRENT_USER]: { name:profile.nick, ini:firstCP(profile.nick), c:'#14B87C', photo:profile.photo } };
+    // 他人の表示名/アバターは public_profiles(安全な窓)から。自分は自分のprofileを優先=上書きしない。
+    (await loadPublicProfiles()).forEach(p=>{
+      if(!members[p.id]) members[p.id]={ name:p.nickname||'', ini:firstCP(p.nickname), c:'#14B87C', photo:p.photo };
+    });
     const data = await loadAll(spaceId);
     logEntries.push(...data.entries);
     posts.push(...data.posts);
