@@ -138,7 +138,7 @@ function openPostSheet(tags, dur, durSec){
   document.getElementById('psDur').textContent='実施 '+dur;
   document.getElementById('psPhotoPreview').innerHTML='';
   document.getElementById('psText').value='';
-  document.getElementById('psPhoto').value='';
+  document.getElementById('psCamera').value=''; document.getElementById('psAlbum').value='';
   document.getElementById('postScrim').classList.remove('hidden');
   document.getElementById('postSheet').classList.add('open');
 }
@@ -1000,6 +1000,8 @@ document.addEventListener('click',e=>{
   if(e.target.closest('.ps-tag-other')) openTagOther('post');
   if(e.target.closest('#tagOtherConfirm')) confirmTagOther();
   if(e.target.closest('#tagOtherCancel')||e.target.closest('#tagOtherScrim')) closeTagOther();
+  if(e.target.closest('#psCameraBtn')) document.getElementById('psCamera').click();   // カメラ直接起動
+  if(e.target.closest('#psAlbumBtn')) document.getElementById('psAlbum').click();      // アルバム選択
   if(e.target.closest('#postSubmit')) submitPost();
   if(e.target.closest('#postCancel')||e.target.closest('#postScrim')) closePostSheet();
   const day=e.target.closest('.day-pill');
@@ -1052,7 +1054,7 @@ document.addEventListener('click',e=>{
 });
 // live maintenance preview while editing the profile sheet
 document.addEventListener('input', e=>{ if(e.target.closest('#profileSheet')) updateProfilePreview(); });
-document.addEventListener('change', e=>{ if(e.target.id==='psPhoto') handlePhoto(e.target.files && e.target.files[0]); });
+document.addEventListener('change', e=>{ if(e.target.id==='psCamera'||e.target.id==='psAlbum') handlePhoto(e.target.files && e.target.files[0]); });
 
 /* ---------- init (runs once, after login) ---------- */
 let appStarted=false;

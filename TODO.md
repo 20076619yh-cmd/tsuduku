@@ -34,6 +34,7 @@ Phase 1 ✅ / Phase 2 ✅ / Phase 3a ✅ / Phase 3b ✅（3b-1 entries・3b-2 po
 ## Phase 5 以降（1週間後〜）
 - [ ] スペース複数作成・切替UI・アイコン/名前編集(Storage) 【旧「グループタブ配置」もここ】
 - [ ] 投稿写真の永続化(Storage)
+- [ ] 無音シャッターでの撮影: Web版ではOS標準カメラの音を制御できず不可。Capacitorネイティブ化時に独自カメラ実装で対応(Snapchat/Instagram方式) 【ストア公開フェーズ】
 - [ ] プロフィール画像のアップロード変更(デフォルトはGoogle画像) 【Phase 5・Storage設定とセット】
 - [ ] リアクションの永続化
 - [ ] リアルタイム同期
