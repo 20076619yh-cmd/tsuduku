@@ -78,7 +78,14 @@
         <button class="vseg text-[12px] font-bold px-4 py-1.5 rounded-full text-sub" data-vview="month">月</button>
       </div>
 
-      <p id="weekMonth" class="text-[11px] font-bold text-faint mb-1.5 ml-0.5"></p>
+      <div id="weekNav" class="flex items-center justify-between mb-2">
+        <button data-wnav="prev" class="pop w-7 h-7 rounded-full border border-line bg-card flex items-center justify-center text-[14px] text-ink">‹</button>
+        <div class="flex items-center gap-2">
+          <span id="weekMonth" class="text-[11px] font-bold text-faint"></span>
+          <button data-wtoday class="pop text-[10px] font-bold text-accent border border-aline bg-asoft rounded-full px-2 py-0.5">今日</button>
+        </div>
+        <button data-wnav="next" class="pop w-7 h-7 rounded-full border border-line bg-card flex items-center justify-center text-[14px] text-ink">›</button>
+      </div>
       <div id="weekStrip" class="grid grid-cols-7 gap-1.5 mb-5"></div>
 
       <!-- month calendar (toggles with week; Monday-first) -->
@@ -89,13 +96,13 @@
           <button data-mnav="next" class="pop w-8 h-8 rounded-full border border-line bg-card flex items-center justify-center text-[16px] text-ink">›</button>
         </div>
         <div class="grid grid-cols-7 mb-1.5 text-center">
+          <span class="text-[10px] font-bold" style="color:#D9686B">日</span>
           <span class="text-[10px] font-bold text-faint">月</span>
           <span class="text-[10px] font-bold text-faint">火</span>
           <span class="text-[10px] font-bold text-faint">水</span>
           <span class="text-[10px] font-bold text-faint">木</span>
           <span class="text-[10px] font-bold text-faint">金</span>
           <span class="text-[10px] font-bold" style="color:#3E86C9">土</span>
-          <span class="text-[10px] font-bold" style="color:#D9686B">日</span>
         </div>
         <div id="monthGrid" class="grid grid-cols-7 gap-y-1"></div>
         <!-- inline detail for the tapped day (no navigation) -->

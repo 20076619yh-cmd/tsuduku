@@ -110,7 +110,7 @@ function mapEntry(x){
 }
 function mapPost(x){
   return { id:x.id, who:x.owner, kind:x.kind, tags:x.tags || [], durSec:x.dur_sec, dur:durLabel(x.dur_sec),
-    photo:x.photo, text:x.body, ruleLabel:x.rule_label, scope:'group', time:'いま',
+    photo:x.photo, text:x.body, ruleLabel:x.rule_label, scope:'group', createdAt:x.created_at,
     r:x.reactions || { fire:0, muscle:0, clap:0 } };
 }
 // 週次振り返り型: streak(連続週数) / streakBest(自己ベスト) / weekChecked(今週チェック済み)
