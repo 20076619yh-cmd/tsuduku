@@ -30,11 +30,13 @@ create table if not exists public.users (
   activity_coef    numeric,                            -- 活動係数(メンテ算出用)
   maintenance_override integer,                        -- 手動補正値(null=自動算出を使う)
   maintenance_kcal integer,                            -- 実効メンテカロリー(override or 算出値)
+  tour_done        boolean not null default false,     -- 初回オンボーディングツアー完了フラグ
   created_at       timestamptz not null default now()
 );
 -- 既存DB向け冪等マイグレーション(既に users を作成済みの環境で列を追加)。
 alter table public.users add column if not exists activity_coef        numeric;
 alter table public.users add column if not exists maintenance_override integer;
+alter table public.users add column if not exists tour_done            boolean not null default false;
 
 -- ---- spaces : 共有の箱(タイムライン/カレンダーの単位) ----------------------
 create table if not exists public.spaces (
