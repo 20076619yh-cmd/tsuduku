@@ -292,10 +292,10 @@
       <button id="profileCancel" class="pop text-[12px] font-bold text-sub">閉じる</button>
     </div>
     <div class="flex flex-col items-center mb-4">
-      <div class="relative">
+      <button id="pfEditPhoto" class="relative pop">
         <div id="pfAvatar" class="w-16 h-16 rounded-full flex items-center justify-center text-white font-extrabold text-[24px]" style="background:#14B87C"></div>
         <span class="absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full bg-card border border-line flex items-center justify-center text-[11px] text-sub">✎</span>
-      </div>
+      </button>
       <p class="text-[10px] text-faint mt-1.5">画像の変更は近日対応（今はGoogleの画像）</p>
     </div>
     <label class="block text-[11px] font-bold text-faint mb-1.5">ニックネーム</label>
@@ -320,7 +320,7 @@
     </div>
     <p class="text-[10px] text-faint mb-3 leading-relaxed">※式は個人で±200〜400kcalずれ得る初期の目安。将来は体重×カロリー実データで補正予定。認証・保存は別フェーズ。</p>
     <button id="profileSave" class="pop w-full bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">保存</button>
-    <button id="openSettings" class="pop w-full mt-2 text-[13px] font-bold text-sub border border-line rounded-2xl py-3 flex items-center justify-center gap-1.5">⚙️ 設定</button>
+    <button id="openSettings" class="pop w-full mt-2 text-[13px] font-bold text-sub border border-line rounded-2xl py-3">設定</button>
     <button id="logoutBtn" class="pop w-full mt-2 text-[13px] font-bold text-sub border border-line rounded-2xl py-3">ログアウト</button>
   </div>
 
@@ -359,12 +359,12 @@
     </div>
   </div>
 
-  <!-- オンボーディングツアー(初回)。コーチマーク風カード＋次へ/スキップ -->
-  <div id="tourOverlay" class="absolute inset-0 z-[80] hidden flex items-end justify-center bg-black/40 px-5 pb-10">
-    <div class="w-full max-w-[340px] bg-card rounded-3xl border border-line shadow-lift p-5">
-      <p id="tourStepNo" class="text-[10px] font-bold text-faint mb-1.5"></p>
-      <p id="tourTitle" class="text-[16px] font-extrabold text-ink mb-1.5"></p>
-      <p id="tourBody" class="text-[13px] text-sub leading-relaxed mb-4"></p>
+  <!-- オンボーディングツアー(初回)。対象要素をハイライトし、その近くに吹き出しを出す -->
+  <div id="tourOverlay" class="absolute inset-0 z-[80] hidden bg-black/20">
+    <div id="tourCard" class="absolute left-1/2 -translate-x-1/2 w-[300px] max-w-[86%] bg-card rounded-3xl border border-line shadow-lift p-4">
+      <p id="tourStepNo" class="text-[10px] font-bold text-faint mb-1"></p>
+      <p id="tourTitle" class="text-[15px] font-extrabold text-ink mb-1"></p>
+      <p id="tourBody" class="text-[13px] text-sub leading-relaxed mb-3"></p>
       <div class="flex items-center justify-between">
         <button id="tourSkip" class="pop text-[12px] font-bold text-faint">スキップ</button>
         <button id="tourNext" class="pop bg-accent text-white text-[13px] font-extrabold rounded-full px-6 py-2.5">次へ</button>

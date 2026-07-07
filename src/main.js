@@ -872,16 +872,36 @@ function openNotify(){ document.getElementById('notifyScrim').classList.remove('
 function closeNotify(){ document.getElementById('notifySheet').classList.remove('open'); document.getElementById('notifyScrim').classList.add('hidden'); }
 function openSettings(){ closeProfile(); document.getElementById('settingsScrim').classList.remove('hidden'); document.getElementById('settingsSheet').classList.add('open'); }
 function closeSettings(){ document.getElementById('settingsSheet').classList.remove('open'); document.getElementById('settingsScrim').classList.add('hidden'); }
-// 初回オンボーディングツアー(コーチマーク風カード)。文言は後で磨く前提のドラフト。
+// 初回オンボーディングツアー。各ステップで対象要素をハイライトし、その近くに吹き出しを出す。
+// target=対象のCSSセレクタ(nullは中央表示)。文言は後で磨く前提のドラフト。
 const TOUR_STEPS=[
-  { page:null,        t:'ようこそ 🌱', b:'fit tree は「運動の絵日記」。焦らず、あなたのペースで、そっと積み上げるアプリです。' },
-  { page:'schedule',  t:'① 予定タブ', b:'ここは予定を「宣言」する場所。きょう何をするかを先に決めておくと、続けやすくなります。' },
-  { page:'schedule',  t:'② 運動開始バー', b:'画面下の「運動開始」でタイマー。終わると、その記録をタイムラインに投稿できます。' },
-  { page:'schedule',  t:'③ 自分ルール', b:'「甘いものを食べない」等を植えて育てます。破らない限り毎日そっと積み上がり、破っても責めません。' },
-  { page:'progress',  t:'④ 記録タブ', b:'運動日数・連続記録・体重などを振り返る場所。数字は大きく、プレッシャーは小さく。' },
-  { page:'schedule',  t:'それでは、はじめましょう 🌱', b:'焦らなくて大丈夫。あなたのペースで、そっと積み上げていきましょう。' },
+  { page:null,       target:null, t:'ようこそ 🌱', b:'fit tree は「運動の絵日記」。焦らず、あなたのペースで、そっと積み上げるアプリです。' },
+  { page:'schedule', target:'.nav-btn[data-page="schedule"]', t:'① 予定タブ', b:'ここは「入力する場所」。きょう誰が何をするかを先に宣言して、続けやすくします。' },
+  { page:'schedule', target:'.day-add', t:'② 予定の入れ方', b:'「＋追記」で宣言。運動の部位（複数OK）と時間を選ぶだけ。体重や食事もここから入力します。' },
+  { page:'schedule', target:'#startBar', t:'③ 運動開始バー', b:'押すとタイマーがスタート。終わると、その記録をそのままタイムラインに投稿できます。' },
+  { page:'schedule', target:'#ruleAddBtn', t:'④ 自分ルール', b:'「甘いものを食べない」等を植えて育てます。破らない限り毎日そっと積み上がり、破っても責めません。' },
+  { page:'feed',     target:'.nav-btn[data-page="feed"]', t:'⑤ タイムライン', b:'みんなの頑張りが流れる場所。🔥💪👏 で気軽に応援し合えます。' },
+  { page:'progress', target:'.nav-btn[data-page="progress"]', t:'⑥ 記録', b:'週と月で振り返る場所。運動日数・連続記録・体重とカロリー差分を、大きな数字でやさしく。' },
+  { page:'schedule', target:null, t:'それでは、はじめましょう 🌱', b:'焦らなくて大丈夫。あなたのペースで、そっと積み上げていきましょう。' },
 ];
-let tourIdx=0;
+let tourIdx=0, tourHi=null;
+function clearTourHighlight(){ if(tourHi){ tourHi.style.boxShadow=''; tourHi.style.borderRadius=''; tourHi=null; } }
+function placeTourCard(sel){
+  const card=document.getElementById('tourCard'); if(!card) return;
+  clearTourHighlight();
+  const el = sel ? document.querySelector(sel) : null;
+  if(!el){ card.style.top='34%'; return; }                 // 中央付近(welcome/締め)
+  el.scrollIntoView({ block:'center' });
+  tourHi=el; el.style.boxShadow='0 0 0 3px #14B87C'; el.style.borderRadius='14px';
+  requestAnimationFrame(()=>{
+    const app=document.getElementById('app').getBoundingClientRect();
+    const r=el.getBoundingClientRect();
+    const cardH=card.offsetHeight||170;
+    let top=r.bottom-app.top+12;                            // まず対象の下に
+    if(top+cardH > app.height-12) top=r.top-app.top-cardH-12; // 収まらなければ上に
+    card.style.top=Math.max(12, Math.min(top, app.height-cardH-12))+'px';
+  });
+}
 function renderTourStep(){
   const s=TOUR_STEPS[tourIdx]; if(!s) return;
   if(s.page) showPage(s.page);
@@ -889,9 +909,11 @@ function renderTourStep(){
   document.getElementById('tourTitle').textContent=s.t;
   document.getElementById('tourBody').textContent=s.b;
   document.getElementById('tourNext').textContent = tourIdx===TOUR_STEPS.length-1 ? 'はじめる' : '次へ';
+  setTimeout(()=>placeTourCard(s.target), 60);   // showPage/描画後に位置決め
 }
 function openTour(){ tourIdx=0; document.getElementById('tourOverlay').classList.remove('hidden'); renderTourStep(); }
 function endTour(){
+  clearTourHighlight();
   document.getElementById('tourOverlay').classList.add('hidden');
   if(members[CURRENT_USER]) markTourDone(CURRENT_USER);   // 完了を保存(次回は出さない)
 }
@@ -1039,6 +1061,7 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#sheetCancel')||e.target.closest('#sheetScrim')) closeSheet();
 
   if(e.target.closest('#profileBtn')) openProfile();
+  if(e.target.closest('#pfEditPhoto')) showToast('プロフィール画像の変更は近日対応します');   // 画像変更=Phase 5
   if(e.target.closest('#profileSave')) saveProfile();
   if(e.target.closest('#profileCancel')||e.target.closest('#profileScrim')) closeProfile();
   // 通知ベル / 設定 / ツアー
@@ -1077,7 +1100,9 @@ async function initApp(session){
   renderMeal(); renderLimits(); renderMonth(); renderMaintCaption(); renderStartBar(); renderStats();
   renderIdentity();
   showPage('schedule');   // app opens on 予定 (also reveals the 運動開始 bar)
-  if(!profile.tourDone) openTour();   // 初回のみオンボーディングツアー
+  // 初回のみ自動表示。既にデータがある既存ユーザーには突然出さない(手動再表示は設定/🔔から)
+  const hasData = logEntries.length>0 || posts.length>0 || limits.length>0;
+  if(!profile.tourDone && !hasData) openTour();
 
 }
 
