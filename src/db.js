@@ -34,6 +34,12 @@ export async function bootstrap(session){
       .from('users').insert({ id: uid, nickname: defaultNick, photo: defaultPhoto }).select().single();
     if(ins.error) throw ins.error;
     urow = ins.data;
+  } else if(!urow.photo && defaultPhoto){
+    // 既存ユーザー(行が写真機能より前に作られた)への遡り: photoが空ならGoogle画像で埋める。
+    // これで再ログイン不要・次のロードで画像が出る(INSERTは既存行では走らないため)。
+    const upd = await supabase
+      .from('users').update({ photo: defaultPhoto }).eq('id', uid).select().single();
+    if(!upd.error && upd.data) urow = upd.data;
   }
 
   // 2) personal space. spaces_select_member returns only spaces I belong to;

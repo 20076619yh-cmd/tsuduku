@@ -806,6 +806,7 @@ function updateProfilePreview(){
   document.getElementById('pfMaint').textContent=Math.round(v).toLocaleString();
 }
 function openProfile(){
+  applyAvatarEl(document.getElementById('pfAvatar'), members[CURRENT_USER]);   // 開時に現在のアバターを同期
   document.getElementById('pfNick').value=profile.nick;
   document.getElementById('pfHeight').value=profile.height;
   document.getElementById('pfWeight').value=profile.weight;
@@ -821,14 +822,15 @@ function closeProfile(){
   document.getElementById('profileScrim').classList.add('hidden');
 }
 // nick is the single source of truth for display name + avatar initial (header + 記録 hero).
+// 画像があれば画像、無ければ頭文字(ヘッダ・記録ヒーロー・プロフィールシート共通)
+function applyAvatarEl(el, m){ if(!el || !m) return;
+  if(m.photo){ el.textContent=''; el.style.backgroundImage=`url('${m.photo}')`; el.style.backgroundSize='cover'; el.style.backgroundPosition='center'; }
+  else { el.style.backgroundImage=''; el.textContent=m.ini; }
+}
 function renderIdentity(){
   const m = members[CURRENT_USER]; if(!m) return;
-  // 画像があれば画像、無ければ従来の頭文字(ヘッダ・記録ヒーロー共通)
-  const applyAvatar=(el)=>{ if(!el) return;
-    if(m.photo){ el.textContent=''; el.style.backgroundImage=`url('${m.photo}')`; el.style.backgroundSize='cover'; el.style.backgroundPosition='center'; }
-    else { el.style.backgroundImage=''; el.textContent=m.ini; } };
-  applyAvatar(document.getElementById('profileBtn'));
-  applyAvatar(document.getElementById('heroAvatar'));
+  applyAvatarEl(document.getElementById('profileBtn'), m);
+  applyAvatarEl(document.getElementById('heroAvatar'), m);
   setHeroName();
 }
 // 記録ヒーローの見出し「◯◯の今週/今月」。名前は絵文字二重を避け、期間は週/月トグルに追随。
