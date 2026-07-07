@@ -22,6 +22,8 @@ export async function bootstrap(session){
   const meta = session.user.user_metadata || {};
   const defaultNick =
     meta.full_name || meta.name || (session.user.email || '').split('@')[0] || 'you';
+  // Google プロフィール画像を users.photo の既定に(好きな画像への変更=Phase 5/Storage)
+  const defaultPhoto = meta.avatar_url || meta.picture || null;
 
   // 1) users row (self). users_select_self → only my own row is visible.
   let { data: urow, error: uErr } = await supabase
@@ -29,7 +31,7 @@ export async function bootstrap(session){
   if(uErr) throw uErr;
   if(!urow){
     const ins = await supabase
-      .from('users').insert({ id: uid, nickname: defaultNick }).select().single();
+      .from('users').insert({ id: uid, nickname: defaultNick, photo: defaultPhoto }).select().single();
     if(ins.error) throw ins.error;
     urow = ins.data;
   }
@@ -60,6 +62,7 @@ export async function bootstrap(session){
 export function profileFromRow(row){
   return {
     nick:    row.nickname || '',
+    photo:   row.photo || null,
     height:  row.height_cm    ?? 175,
     weight:  row.weight_kg    ?? 71.0,
     bodyfat: row.body_fat_pct ?? 18,

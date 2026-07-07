@@ -26,6 +26,7 @@ const tagDot = {
   '肩':'#E0A53A','腕':'#B5836A','有酸素':'#14B87C','ストレッチ':'#5FB6A8','休養':'#9AA09A'
 };
 function avatar(m,size=40){
+  if(m.photo) return `<div style="width:${size}px;height:${size}px;background-image:url('${m.photo}');background-size:cover;background-position:center" class="rounded-full shrink-0"></div>`;
   return `<div style="width:${size}px;height:${size}px;background:${m.c}" class="rounded-full flex items-center justify-center text-white font-bold shrink-0"><span style="font-size:${Math.round(size*0.4)}px">${m.ini}</span></div>`;
 }
 function chip(tag,status){
@@ -774,7 +775,7 @@ function renderProgressHero(){
 }
 
 /* ---------- profile + maintenance (Katch-McArdle, mock — no auth/persistence) ---------- */
-const profile = { nick:'ぼーい', height:175, weight:71.0, bodyfat:18, activity:1.45, maintenanceOverride:null };
+const profile = { nick:'ぼーい', photo:null, height:175, weight:71.0, bodyfat:18, activity:1.45, maintenanceOverride:null };
 // LBM=体重×(1-体脂肪/100), BMR=370+21.6×LBM, メンテ=BMR×活動係数。これは「初期の目安」
 // （式は個人で±200〜400kcalずれ得る）。将来は体重×カロリー実データで補正(学習)する構造を見据える（今回は未実装、初期値＋手動補正のみ）。
 function computeMaintenance(p){
@@ -822,8 +823,12 @@ function closeProfile(){
 // nick is the single source of truth for display name + avatar initial (header + 記録 hero).
 function renderIdentity(){
   const m = members[CURRENT_USER]; if(!m) return;
-  const btn = document.getElementById('profileBtn'); if(btn) btn.textContent = m.ini;
-  const ha  = document.getElementById('heroAvatar'); if(ha) ha.textContent = m.ini;
+  // 画像があれば画像、無ければ従来の頭文字(ヘッダ・記録ヒーロー共通)
+  const applyAvatar=(el)=>{ if(!el) return;
+    if(m.photo){ el.textContent=''; el.style.backgroundImage=`url('${m.photo}')`; el.style.backgroundSize='cover'; el.style.backgroundPosition='center'; }
+    else { el.style.backgroundImage=''; el.textContent=m.ini; } };
+  applyAvatar(document.getElementById('profileBtn'));
+  applyAvatar(document.getElementById('heroAvatar'));
   setHeroName();
 }
 // 記録ヒーローの見出し「◯◯の今週/今月」。名前は絵文字二重を避け、期間は週/月トグルに追随。
@@ -941,7 +946,7 @@ async function initApp(session){
     const { userId, spaceId, urow } = await bootstrap(session);
     CURRENT_USER=userId; SPACE_ID=spaceId;
     Object.assign(profile, profileFromRow(urow));
-    members = { [CURRENT_USER]: { name:profile.nick, ini:firstCP(profile.nick), c:'#14B87C' } };
+    members = { [CURRENT_USER]: { name:profile.nick, ini:firstCP(profile.nick), c:'#14B87C', photo:profile.photo } };
     const data = await loadAll(spaceId);
     logEntries.push(...data.entries);
     posts.push(...data.posts);
