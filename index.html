@@ -42,6 +42,9 @@
         <h1 class="text-[16px] font-extrabold text-ink tracking-tight">fit tree</h1>
       </div>
       <div class="flex items-center gap-2">
+        <button id="membersBtn" class="pop w-8 h-8 rounded-full flex items-center justify-center text-sub">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-[18px] h-[18px]"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </button>
         <button id="bellBtn" class="pop w-8 h-8 rounded-full flex items-center justify-center text-sub">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-[18px] h-[18px]"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>
         </button>
@@ -135,7 +138,7 @@
           <button id="ruleAddBtn" class="rule-add pop text-[11px] font-bold text-accent">＋ ルール追加</button>
         </div>
         <div id="limitList" class="space-y-2"></div>
-        <p class="text-[10px] text-faint mt-2">破らない限り毎日そっと積み上がる。✕でまた植え直すか、終えるかを選べる ・ 🌐/🔒 で公開範囲 ・ 最大3つ</p>
+        <p class="text-[10px] text-faint mt-2">🔥＝続いた日数。破らない限り毎日そっと積み上がる。✕でまた植え直すか、終えるかを選べる ・ 🌐/🔒 で公開範囲 ・ 最大3つ</p>
       </div>
 
       <div class="h-16"></div><!-- spacer so the fixed 運動開始 bar never covers the last card -->
@@ -371,6 +374,18 @@
       <div class="text-[13px] font-bold text-sub border border-line rounded-2xl px-4 py-3">サブスクリプション管理</div>
       <div class="text-[13px] font-bold text-sub border border-line rounded-2xl px-4 py-3">利用規約 / プライバシーポリシー</div>
     </div>
+  </div>
+
+  <!-- つながっているメンバー一覧(ヘッダの人アイコン)。プロフィールカードより前=カードが上に重なる -->
+  <div id="membersScrim" class="sheet-scrim absolute inset-0 z-40 hidden"></div>
+  <div id="membersSheet" class="sheet absolute inset-x-0 bottom-0 z-50 bg-card rounded-t-[24px] border-t border-line px-5 pt-3 pb-7">
+    <div class="w-10 h-1 rounded-full bg-line mx-auto mb-4"></div>
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-[16px] font-extrabold text-ink">つながっているメンバー</p>
+      <button id="membersClose" class="pop text-[12px] font-bold text-sub">閉じる</button>
+    </div>
+    <div id="membersList" class="space-y-2"></div>
+    <button id="membersInvite" class="pop w-full mt-4 text-[13px] font-bold text-accent border border-aline bg-asoft rounded-2xl py-3">＋ メンバーを招待</button>
   </div>
 
   <!-- オンボーディングツアー(初回)。対象要素をハイライトし、その近くに吹き出しを出す -->

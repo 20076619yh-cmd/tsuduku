@@ -37,8 +37,11 @@ const tagDot = {
 };
 function avatar(m,size=40,who=''){
   const du = who ? ` data-user="${who}"` : '';   // タップ相手を特定するため
-  if(m.photo) return `<div${du} style="width:${size}px;height:${size}px;background-image:url('${m.photo}');background-size:cover;background-position:center" class="avatar-btn cursor-pointer rounded-full shrink-0"></div>`;
-  return `<div${du} style="width:${size}px;height:${size}px;background:${m.c}" class="avatar-btn cursor-pointer rounded-full flex items-center justify-center text-white font-bold shrink-0"><span style="font-size:${Math.round(size*0.4)}px">${m.ini}</span></div>`;
+  const base=`avatar-btn cursor-pointer rounded-full shrink-0 flex items-center justify-center text-white font-bold`;
+  const letter=`<span style="font-size:${Math.round(size*0.4)}px">${m.ini}</span>`;
+  // 頭文字を土台に置き画像を重ねる。null=画像なしで頭文字/壊れ・期限切れURL=onerrorで画像を外し頭文字に戻す。
+  if(m.photo) return `<div${du} style="width:${size}px;height:${size}px;background:${m.c}" class="${base} relative overflow-hidden">${letter}<img src="${m.photo}" onerror="this.remove()" class="absolute inset-0 w-full h-full object-cover" alt=""></div>`;
+  return `<div${du} style="width:${size}px;height:${size}px;background:${m.c}" class="${base}">${letter}</div>`;
 }
 function chip(tag,status){
   const dot=tagDot[tag]||'#9AA09A';
@@ -167,7 +170,8 @@ function renderFeedAvatars(){
   const whos=[...new Set(posts.map(p=>p.who))].filter(k=>members[k]).slice(0,3);
   document.getElementById('feedAvatars').innerHTML =
     whos.map(k=>`<div class="ring-2 ring-bg rounded-full">${avatar(members[k],24)}</div>`).join('');
-  const cnt=document.getElementById('feedCount'); if(cnt) cnt.textContent=`きょう ${posts.length}件`;
+  const cnt=document.getElementById('feedCount');
+  if(cnt){ const n=posts.filter(p=>p.kind!=='achieve'&&isTodayIso(p.createdAt)).length; cnt.textContent=`きょう ${n}件`; }
 }
 function renderFeed(){
   renderFeedAvatars();
@@ -222,7 +226,7 @@ function ruleFooter(p){
   const snap = p.rulesSnapshot || [];
   if(!snap.length) return '';
   return `<div class="px-4 pb-2 -mt-0.5 flex flex-wrap gap-x-3 gap-y-1">${
-    snap.map(r=>`<span class="text-[11px] font-bold text-accent">🔥 ${r.label} ${r.day}日目</span>`).join('')
+    snap.map(r=>`<span class="text-[11px] font-bold text-accent">🔥 ${r.label} ${r.day}</span>`).join('')
   }</div>`;
 }
 
@@ -257,6 +261,8 @@ function fmtLabel(s){
   const txt=`${m+1}月${d}日(${WD[wdIndex(s)]})`;
   return s<TODAY ? `${txt} の記録` : `${txt} の予定`;
 }
+// ISO(created_at)が端末ローカルで「今日」か。タイムラインの「きょう◯件」用。
+function isTodayIso(iso){ if(!iso) return false; const d=new Date(iso); return ymd(d.getFullYear(),d.getMonth(),d.getDate())===TODAY; }
 // created_at(ISO) → 相対時刻。今/◯分前/◯時間前/昨日/◯日前、7日以上前は日付。
 function relTime(iso){
   if(!iso) return '';
@@ -618,10 +624,10 @@ function ruleStreak(r){ return r.streakStart ? daysBetween(r.streakStart, TODAY)
 function renderLimits(){
   const list=document.getElementById('limitList');
   if(!list) return;
-  // ミニマル行: ルール名(フル・切れない) ＋ 🔥N日目 ＋ 公開/非公開マーク ＋ ✕
+  // ミニマル行: ルール名(フル・切れない) ＋ 🔥N(連続日数・Snapchat式・「日目」表記なし) ＋ 公開/非公開マーク ＋ ✕
   list.innerHTML = limits.length ? limits.map((l,i)=>{
     const cur=ruleStreak(l);
-    const streakChip = l.streakStart ? `<span class="text-[10px] font-extrabold text-accent ml-2 whitespace-nowrap">🔥${cur}日目</span>` : '';
+    const streakChip = l.streakStart ? `<span class="text-[10px] font-extrabold text-accent ml-2 whitespace-nowrap">🔥${cur}</span>` : '';
     return `<div class="limit flex items-center gap-2 rounded-2xl border bg-card border-line px-3 py-2.5" data-i="${i}">
       <span class="text-[15px] shrink-0">${l.emoji}</span>
       <div class="flex-1 min-w-0"><p class="text-[13px] font-bold text-ink leading-snug">${l.label}${streakChip}</p></div>
@@ -859,7 +865,7 @@ function closeProfile(){
 }
 // 閲覧用プロフィールカード(nickname/アバター＋公開ルール最大3つと🔥日数)。今は自分のみ、他人参照はPhase 4。
 function pcRuleRow(l){
-  return `<div class="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2"><span class="text-[14px]">${l.emoji||'🎯'}</span><span class="flex-1 text-[13px] font-bold text-ink truncate">${l.label}</span>${l.streakStart?`<span class="text-[11px] font-extrabold text-accent whitespace-nowrap">🔥${ruleStreak(l)}日目</span>`:''}</div>`;
+  return `<div class="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2"><span class="text-[14px]">${l.emoji||'🎯'}</span><span class="flex-1 text-[13px] font-bold text-ink truncate">${l.label}</span>${l.streakStart?`<span class="text-[11px] font-extrabold text-accent whitespace-nowrap">🔥${ruleStreak(l)}</span>`:''}</div>`;
 }
 // タップされた相手のカードを表示。自分=own limits、相手=公開ルールをその都度取得(rules RLSがpub＋つながりを担保)。
 async function openProfileCard(userId){
@@ -881,6 +887,21 @@ function closeProfileCard(){
   document.getElementById('pcSheet').classList.remove('open');
   document.getElementById('pcScrim').classList.add('hidden');
 }
+// つながっているメンバー一覧(自分＋public_profilesで見えるつながり相手)。名前・アバターを一覧表示。
+// スペース切替ではなく「つながっている人の一覧」(つながり型)。行内アバターのタップ→その人のプロフィールカード。
+function renderMembersList(){
+  const el=document.getElementById('membersList'); if(!el) return;
+  const others=Object.keys(members).filter(id=>id!==CURRENT_USER);
+  const row=(id,isSelf)=>{ const m=members[id]; return `<div class="flex items-center gap-3 rounded-2xl border border-line bg-card px-3 py-2.5">
+    ${avatar(m,36,id)}
+    <span class="flex-1 text-[13px] font-bold text-ink truncate">${m.name||'メンバー'}</span>
+    ${isSelf?'<span class="text-[10px] font-bold text-faint">あなた</span>':''}
+  </div>`; };
+  el.innerHTML = row(CURRENT_USER,true) + others.map(id=>row(id,false)).join('')
+    + (others.length?'':'<p class="text-[12px] text-faint text-center py-3">まだ他のメンバーはいません。招待コードでつながれます</p>');
+}
+function openMembers(){ renderMembersList(); document.getElementById('membersScrim').classList.remove('hidden'); document.getElementById('membersSheet').classList.add('open'); }
+function closeMembers(){ document.getElementById('membersSheet').classList.remove('open'); document.getElementById('membersScrim').classList.add('hidden'); }
 /* ---------- 通知パネル / 設定 / オンボーディングツアー(器) ---------- */
 function openNotify(){ document.getElementById('notifyScrim').classList.remove('hidden'); document.getElementById('notifySheet').classList.add('open'); }
 function closeNotify(){ document.getElementById('notifySheet').classList.remove('open'); document.getElementById('notifyScrim').classList.add('hidden'); }
@@ -970,8 +991,15 @@ function confirmTagOther(){
 // nick is the single source of truth for display name + avatar initial (header + 記録 hero).
 // 画像があれば画像、無ければ頭文字(ヘッダ・記録ヒーロー・プロフィールシート共通)
 function applyAvatarEl(el, m){ if(!el || !m) return;
-  if(m.photo){ el.textContent=''; el.style.backgroundImage=`url('${m.photo}')`; el.style.backgroundSize='cover'; el.style.backgroundPosition='center'; }
-  else { el.style.backgroundImage=''; el.textContent=m.ini; }
+  el.style.backgroundImage='';
+  el.textContent = m.ini || '?';   // 頭文字を土台に(画像失敗時のフォールバック)
+  if(m.photo){
+    el.style.position='relative'; el.style.overflow='hidden';
+    const img=document.createElement('img');
+    img.src=m.photo; img.alt=''; img.className='absolute inset-0 w-full h-full object-cover';
+    img.onerror=()=>img.remove();   // 壊れ/期限切れURLなら外して頭文字に戻す
+    el.appendChild(img);
+  }
 }
 function renderIdentity(){
   const m = members[CURRENT_USER]; if(!m) return;
@@ -1092,7 +1120,10 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#pfEditPhoto')) showToast('プロフィール画像の変更は近日対応します');   // 画像変更=Phase 5
   if(e.target.closest('#profileSave')) saveProfile();
   if(e.target.closest('#profileCancel')||e.target.closest('#profileScrim')) closeProfile();
-  // 通知ベル / 設定 / ツアー
+  // メンバー一覧 / 通知ベル / 設定 / ツアー
+  if(e.target.closest('#membersBtn')) openMembers();
+  if(e.target.closest('#membersClose')||e.target.closest('#membersScrim')) closeMembers();
+  if(e.target.closest('#membersInvite')){ closeMembers(); openSettings(); }
   if(e.target.closest('#bellBtn')) openNotify();
   if(e.target.closest('#notifyClose')||e.target.closest('#notifyScrim')) closeNotify();
   if(e.target.closest('#notifyTour')){ closeNotify(); openTour(); }
