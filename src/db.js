@@ -109,18 +109,52 @@ export async function loadPublicRules(userId){
   return (data || []).map(mapRule);
 }
 
-// つながる(グループ招待): 自グループの招待コードを発行(既定24h・使用回数無制限)。
+// つながる(グループ招待): 招待コードを発行。generate_invite RPC が「同space_idの既存コード削除→新規発行」を
+// まとめて行うため、常に最新の1コードだけが有効(再発行で直前のコードは無効化=送り間違えを殺せる)。
+// ※このRPCは task-2 のSQL実行が前提(未実行だと404)。
 export async function createInvite(spaceId){
-  const { data, error } = await supabase.from('invitations')
-    .insert({ space_id: spaceId, created_by: _uid }).select('code, expires_at').single();
+  const { data, error } = await supabase.rpc('generate_invite', { p_space_id: spaceId });
   if(error){ console.error('createInvite failed:', error.message || error); return null; }
-  return data;   // { code, expires_at }
+  return data;   // invitations 行(code, expires_at, ...)
 }
 // 招待コードで参加(唯一の入口)。成功で参加した space_id を返す・無効/期限切れは throw。
 export async function joinWithCode(code){
   const { data, error } = await supabase.rpc('join_space_with_code', { p_code: code });
   if(error) throw error;
   return data;   // space_id
+}
+
+// グループ管理: 自分がownerのグループの「外せるメンバー」＋自分が参加(非owner)の「抜けられるグループ」。
+//   removable = [{spaceId,userId}] (自分作成のspaceの自分以外)  / joinedSpaceIds = 参加中(非owner)のspace_id[]
+//   ownedを spaces.created_by=自分 で明示解決(bootstrapのSPACE_IDは参加先を拾い得るため使わない)。
+export async function loadGroupAdmin(){
+  const { data: owned, error: e1 } = await supabase.from('spaces').select('id').eq('created_by', _uid);
+  if(e1){ console.error('loadGroupAdmin(spaces) failed:', e1.message || e1); return { removable:[], joinedSpaceIds:[] }; }
+  const ownedIds = (owned || []).map(s => s.id);
+  const { data: mine, error: e2 } = await supabase.from('space_members').select('space_id').eq('user_id', _uid);
+  if(e2){ console.error('loadGroupAdmin(mine) failed:', e2.message || e2); return { removable:[], joinedSpaceIds:[] }; }
+  const joinedSpaceIds = (mine || []).map(m => m.space_id).filter(id => !ownedIds.includes(id));
+  let removable = [];
+  if(ownedIds.length){
+    const { data: mem, error: e3 } = await supabase.from('space_members')
+      .select('space_id, user_id').in('space_id', ownedIds).neq('user_id', _uid);
+    if(e3) console.error('loadGroupAdmin(members) failed:', e3.message || e3);
+    else removable = (mem || []).map(r => ({ spaceId: r.space_id, userId: r.user_id }));
+  }
+  return { removable, joinedSpaceIds };
+}
+// ownerがメンバーを外す(RLS: members_delete_by_owner が門番)。
+export async function removeGroupMember(spaceId, userId){
+  const { error } = await supabase.from('space_members').delete().eq('space_id', spaceId).eq('user_id', userId);
+  if(error){ fail('removeGroupMember', error); return false; }
+  return true;
+}
+// 自分が参加中のグループから抜ける(RLS: members_leave_self・非ownerのみ)。
+export async function leaveGroups(spaceIds){
+  if(!spaceIds || !spaceIds.length) return false;
+  const { error } = await supabase.from('space_members').delete().eq('user_id', _uid).in('space_id', spaceIds);
+  if(error){ fail('leaveGroups', error); return false; }
+  return true;
 }
 
 // Phase 4a: 公開プロフィール(安全な窓)。他人に見せてよい最小限(id/nickname/photo)だけ。

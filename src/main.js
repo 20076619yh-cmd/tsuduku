@@ -2,7 +2,7 @@
 import './style.css';
 import Chart from 'chart.js/auto';   // auto = same all-controllers registration as the old UMD CDN
 import { supabase } from './supabase.js';
-import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler, markTourDone, loadPublicProfiles, loadPublicRules, createInvite, joinWithCode } from './db.js';
+import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler, markTourDone, loadPublicProfiles, loadPublicRules, createInvite, joinWithCode, loadGroupAdmin, removeGroupMember, leaveGroups } from './db.js';
 
 /* ---------- members ---------- */
 // Flat initial state: just me. Friends arrive in the backend/sharing phase (I/I2).
@@ -10,6 +10,9 @@ import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, remove
 let members = {
   boy:   { name:'ぼーい', ini:'ボ', c:'#14B87C' },
 };
+// グループ管理: 自分がownerのグループの外せるメンバー[{spaceId,userId}] / 自分が参加(非owner)中で抜けられるグループ
+let removableMembers = [];
+let joinedSpaceIds = [];
 // First code point (not str[0]) so emoji / surrogate-pair nicknames don't get half-cut.
 function firstCP(s){ return (Array.from((s || '').trim())[0]) || '?'; }
 // 保存失敗の軽いトースト(自動で消える・ノーシェイム)。db.jsの保存系失敗時に共通発火。
@@ -208,12 +211,13 @@ function renderFeed(){
       </div>
       ${imgBlock}
       ${body}
-      ${ruleFooter(p)}
-      <div class="flex gap-2 px-4 py-3">
+      ${ruleSection(p)}
+      <div class="flex gap-2 px-4 py-3 border-t border-line">
         ${reactBtn(i,'fire','🔥',p.r.fire)}
         ${reactBtn(i,'muscle','💪',p.r.muscle)}
         ${reactBtn(i,'clap','👏',p.r.clap)}
       </div>
+      <!-- コメント欄(4d)予定地。将来ここに border-t border-line のセクションを追加する -->
     </article>`;
   }).join('');
 }
@@ -222,12 +226,16 @@ function reactBtn(i,key,emo,n){
 }
 // 投稿カード下部に「投稿時点の公開ルール」を最大3つ併記。焼き込み済みスナップショットを描画=不変(ライブ計算しない)。
 // 投稿自体に載るので、つながり相手(B)の投稿にも B のルールが正しく出る(他人ルールを別途取得しない)。
-function ruleFooter(p){
+function ruleSection(p){
   const snap = p.rulesSnapshot || [];
   if(!snap.length) return '';
-  return `<div class="px-4 pb-2 -mt-0.5 flex flex-wrap gap-x-3 gap-y-1">${
-    snap.map(r=>`<span class="text-[11px] font-bold text-accent">🔥 ${r.label} ${r.day}</span>`).join('')
-  }</div>`;
+  // 小見出し「継続中の自分ルール」＋上ヘアライン。他人の投稿でも「この人が続けている約束」だと分かる
+  return `<div class="px-4 py-3 border-t border-line">
+    <p class="text-[10px] font-bold text-faint mb-1.5">継続中の自分ルール</p>
+    <div class="flex flex-wrap gap-x-3 gap-y-1">${
+      snap.map(r=>`<span class="text-[11px] font-bold text-accent">${r.label} 🔥${r.day}</span>`).join('')
+    }</div>
+  </div>`;
 }
 
 /* ---------- SCHEDULE (type-tagged log · week/month · bottom sheet) ---------- */
@@ -891,17 +899,58 @@ function closeProfileCard(){
 // スペース切替ではなく「つながっている人の一覧」(つながり型)。行内アバターのタップ→その人のプロフィールカード。
 function renderMembersList(){
   const el=document.getElementById('membersList'); if(!el) return;
+  const removableMap=new Map(removableMembers.map(r=>[r.userId, r.spaceId]));   // 外せる人→対象space
   const others=Object.keys(members).filter(id=>id!==CURRENT_USER);
-  const row=(id,isSelf)=>{ const m=members[id]; return `<div class="flex items-center gap-3 rounded-2xl border border-line bg-card px-3 py-2.5">
-    ${avatar(m,36,id)}
-    <span class="flex-1 text-[13px] font-bold text-ink truncate">${m.name||'メンバー'}</span>
-    ${isSelf?'<span class="text-[10px] font-bold text-faint">あなた</span>':''}
-  </div>`; };
+  const row=(id,isSelf)=>{
+    const m=members[id];
+    // ownerである自分だけに見える「外す」(自分以外＆自グループのメンバー)。RLSが最終門番。
+    const removeBtn=(!isSelf && removableMap.has(id))
+      ? `<button class="member-remove pop text-[11px] font-bold text-faint border border-line rounded-full px-2.5 py-1 shrink-0" data-user="${id}" data-space="${removableMap.get(id)}">外す</button>`
+      : '';
+    return `<div class="flex items-center gap-3 rounded-2xl border border-line bg-card px-3 py-2.5">
+      ${avatar(m,36,id)}
+      <span class="flex-1 text-[13px] font-bold text-ink truncate">${m.name||'メンバー'}</span>
+      ${isSelf?'<span class="text-[10px] font-bold text-faint shrink-0">あなた</span>':removeBtn}
+    </div>`;
+  };
   el.innerHTML = row(CURRENT_USER,true) + others.map(id=>row(id,false)).join('')
-    + (others.length?'':'<p class="text-[12px] text-faint text-center py-3">まだ他のメンバーはいません。招待コードでつながれます</p>');
+    + (others.length?'':'<p class="text-[12px] text-faint text-center py-3">まだ他のメンバーはいません。招待コードでつながれます</p>')
+    // 参加(非owner)中のグループがあるときだけ「グループを抜ける」を出す(ノーシェイム・静かに)
+    + (joinedSpaceIds.length?`<button class="group-leave pop w-full mt-3 text-[12px] font-bold text-sub border border-line rounded-2xl py-2.5">グループを抜ける</button>`:'');
 }
 function openMembers(){ renderMembersList(); document.getElementById('membersScrim').classList.remove('hidden'); document.getElementById('membersSheet').classList.add('open'); }
 function closeMembers(){ document.getElementById('membersSheet').classList.remove('open'); document.getElementById('membersScrim').classList.add('hidden'); }
+// メンバー排除/離脱の確認シート(JSのconfirm()は使わない=画面ブロック回避)。
+let memberAct=null;   // {kind:'remove',userId,spaceId} | {kind:'leave',spaceIds:[]}
+function openMemberRemove(userId, spaceId){
+  const m=members[userId]||{};
+  memberAct={kind:'remove', userId, spaceId};
+  document.getElementById('memberActMsg').textContent=`${m.name||'この人'}をグループから外しますか？`;
+  document.getElementById('memberActConfirm').textContent='外す';
+  document.getElementById('memberActScrim').classList.remove('hidden');
+  document.getElementById('memberActSheet').classList.add('open');
+}
+function openGroupLeave(){
+  memberAct={kind:'leave', spaceIds:joinedSpaceIds.slice()};
+  document.getElementById('memberActMsg').textContent='参加しているグループから抜けますか？（つながりが解除されます）';
+  document.getElementById('memberActConfirm').textContent='抜ける';
+  document.getElementById('memberActScrim').classList.remove('hidden');
+  document.getElementById('memberActSheet').classList.add('open');
+}
+function closeMemberAct(){
+  document.getElementById('memberActSheet').classList.remove('open');
+  document.getElementById('memberActScrim').classList.add('hidden');
+  memberAct=null;
+}
+async function confirmMemberAct(){
+  const act=memberAct; closeMemberAct();
+  if(!act) return;
+  const ok = act.kind==='remove'
+    ? await removeGroupMember(act.spaceId, act.userId)
+    : await leaveGroups(act.spaceIds);
+  if(ok){ showToast(act.kind==='remove'?'グループから外しました':'グループを抜けました'); setTimeout(()=>location.reload(), 700); }
+  else showToast('操作に失敗しました。通信を確認してください');
+}
 /* ---------- 通知パネル / 設定 / オンボーディングツアー(器) ---------- */
 function openNotify(){ document.getElementById('notifyScrim').classList.remove('hidden'); document.getElementById('notifySheet').classList.add('open'); }
 function closeNotify(){ document.getElementById('notifySheet').classList.remove('open'); document.getElementById('notifyScrim').classList.add('hidden'); }
@@ -1124,6 +1173,10 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#membersBtn')) openMembers();
   if(e.target.closest('#membersClose')||e.target.closest('#membersScrim')) closeMembers();
   if(e.target.closest('#membersInvite')){ closeMembers(); openSettings(); }
+  { const mr=e.target.closest('.member-remove'); if(mr) openMemberRemove(mr.dataset.user, mr.dataset.space); }
+  if(e.target.closest('.group-leave')) openGroupLeave();
+  if(e.target.closest('#memberActConfirm')) confirmMemberAct();
+  if(e.target.closest('#memberActCancel')||e.target.closest('#memberActScrim')) closeMemberAct();
   if(e.target.closest('#bellBtn')) openNotify();
   if(e.target.closest('#notifyClose')||e.target.closest('#notifyScrim')) closeNotify();
   if(e.target.closest('#notifyTour')){ closeNotify(); openTour(); }
@@ -1161,6 +1214,9 @@ async function initApp(session){
     limits.push(...data.rules);
     // つながり相手の投稿ownerが members に無ければニュートラル補完(表示が落ちないように)
     posts.forEach(p=>{ if(p.who && !members[p.who]) members[p.who]={ name:'メンバー', ini:'?', c:'#9AA09A', photo:null }; });
+    // グループ管理: 外せるメンバー＋抜けられるグループを解決(メンバー一覧の管理操作用)
+    const ga = await loadGroupAdmin();
+    removableMembers = ga.removable; joinedSpaceIds = ga.joinedSpaceIds;
   }catch(err){
     console.error('bootstrap/load failed:', err.message || err);
   }

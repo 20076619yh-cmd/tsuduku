@@ -388,6 +388,15 @@
     <button id="membersInvite" class="pop w-full mt-4 text-[13px] font-bold text-accent border border-aline bg-asoft rounded-2xl py-3">＋ メンバーを招待</button>
   </div>
 
+  <!-- メンバー排除/離脱の確認(ノーシェイム・軽い2択)。membersSheetより前面 -->
+  <div id="memberActScrim" class="sheet-scrim absolute inset-0 z-[55] hidden"></div>
+  <div id="memberActSheet" class="sheet absolute inset-x-0 bottom-0 z-[60] bg-card rounded-t-[24px] border-t border-line px-5 pt-3 pb-7">
+    <div class="w-10 h-1 rounded-full bg-line mx-auto mb-4"></div>
+    <p id="memberActMsg" class="text-[14px] font-bold text-ink text-center mb-4"></p>
+    <button id="memberActConfirm" class="pop w-full bg-ink text-white text-[14px] font-extrabold rounded-2xl py-3.5 mb-2">外す</button>
+    <button id="memberActCancel" class="pop w-full text-[12px] font-bold text-faint py-2">キャンセル</button>
+  </div>
+
   <!-- オンボーディングツアー(初回)。対象要素をハイライトし、その近くに吹き出しを出す -->
   <div id="tourOverlay" class="absolute inset-0 z-[80] hidden bg-black/20">
     <div id="tourCard" class="absolute left-1/2 -translate-x-1/2 w-[300px] max-w-[86%] bg-card rounded-3xl border border-line shadow-lift p-4">
