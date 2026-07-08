@@ -57,7 +57,9 @@ function hudCell(label,val,color){
 const posts = [];
 // single source of truth for creating timeline posts. id=crypto.randomUUID (same id in DB).
 function createPost({kind='workout', who=CURRENT_USER, tags=[], dur=null, durSec=null, photo=null, text='', ruleLabel=null, scope='group'}){
-  return { id:crypto.randomUUID(), kind, who, scope, createdAt:new Date().toISOString(), tags:(tags||[]).slice(), dur, durSec, photo, text, ruleLabel, r:{fire:0,muscle:0,clap:0} };
+  // 投稿時点の公開ルール(最大3・名前＋日数)を焼き込む=以後不変(日記・盛れない構造)
+  const rulesSnapshot = limits.filter(l=>l.pub && l.streakStart).slice(0,3).map(l=>({label:l.label, day:ruleStreak(l)}));
+  return { id:crypto.randomUUID(), kind, who, scope, createdAt:new Date().toISOString(), tags:(tags||[]).slice(), dur, durSec, photo, text, ruleLabel, rulesSnapshot, r:{fire:0,muscle:0,clap:0} };
 }
 // single funnel: local prepend + render, then persist in background (失敗はconsole.error)
 function addPost(p){ posts.unshift(p); renderFeed(); upsertPost(p); }
@@ -213,11 +215,14 @@ function renderFeed(){
 function reactBtn(i,key,emo,n){
   return `<button class="react pop flex items-center gap-1.5 border border-line bg-card px-3 py-1.5 rounded-full text-[13px] font-bold text-sub" data-i="${i}" data-k="${key}"><span>${emo}</span><span class="cnt">${n}</span></button>`;
 }
-// 投稿カード下部に継続中の公開ルールを小さく併記(公開のみ・日数のみ・独立スレッドにしない=タイムラインをシンプルに)
+// 投稿カード下部に「投稿時点の公開ルール」を最大3つ併記。焼き込み済みスナップショットを描画=不変(ライブ計算しない)。
+// 投稿自体に載るので、つながり相手(B)の投稿にも B のルールが正しく出る(他人ルールを別途取得しない)。
 function ruleFooter(p){
-  if(p.who!==CURRENT_USER) return '';   // 今は自分のみ。他人の投稿への併記は Phase 4
-  const r=limits.filter(l=>l.pub&&l.streakStart).sort((a,b)=>ruleStreak(b)-ruleStreak(a))[0];
-  return r ? `<div class="px-4 pb-2 -mt-0.5"><span class="text-[11px] font-bold text-accent">🔥 ${r.label} ${ruleStreak(r)}日目</span></div>` : '';
+  const snap = p.rulesSnapshot || [];
+  if(!snap.length) return '';
+  return `<div class="px-4 pb-2 -mt-0.5 flex flex-wrap gap-x-3 gap-y-1">${
+    snap.map(r=>`<span class="text-[11px] font-bold text-accent">🔥 ${r.label} ${r.day}日目</span>`).join('')
+  }</div>`;
 }
 
 /* ---------- SCHEDULE (type-tagged log · week/month · bottom sheet) ---------- */

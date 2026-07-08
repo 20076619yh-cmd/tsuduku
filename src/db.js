@@ -152,7 +152,7 @@ function mapEntry(x){
 }
 function mapPost(x){
   return { id:x.id, who:x.owner, kind:x.kind, tags:x.tags || [], durSec:x.dur_sec, dur:durLabel(x.dur_sec),
-    photo:x.photo, text:x.body, ruleLabel:x.rule_label, scope:'group', createdAt:x.created_at,
+    photo:x.photo, text:x.body, ruleLabel:x.rule_label, rulesSnapshot:x.rules_snapshot || [], scope:'group', createdAt:x.created_at,
     r:x.reactions || { fire:0, muscle:0, clap:0 } };
 }
 // 日数ストリーク型: streakStart(開始/最終リセット日)のみ。自己ベストは持たない(育てる思想)。
@@ -189,6 +189,7 @@ function postToRow(p){
     id: p.id, owner: _uid, space_id: _spaceId, kind: p.kind,
     tags: p.tags || [], dur_sec: p.durSec ?? null, photo: null,
     body: p.text ?? null, rule_label: p.ruleLabel ?? null,
+    rules_snapshot: p.rulesSnapshot ?? [],   // 投稿時点の公開ルール(名前＋日数)を焼き込み・以後不変
   };
 }
 export async function upsertPost(p){
