@@ -261,5 +261,91 @@ grant select, insert, update, delete on
 grant execute on function public.is_space_member(uuid) to authenticated;
 
 -- =============================================================
--- 完了。次は src/db.js + main.js/index.html の配線(Phase 3a アプリ側)。
+-- 6) つながり型アーキテクチャ（確定版・Step1-3で適用）
+--    上の 4)POLICIES の entries/posts/rules の "スペース(is_space_member)" 版は
+--    ここで "つながり(is_connected)" 版に置き換わる(drop→create で上書き・冪等)。
+--    可視性は space_id ではなく owner とのつながりで判定する(CLAUDE.md「アーキテクチャ確定版」)。
+-- =============================================================
+
+-- 6-1) is_connected: 自分自身 or いずれかのグループ(space)を共有 → true
+create or replace function public.is_connected(p_user uuid)
+returns boolean language sql security definer set search_path = public stable as $$
+  select p_user = auth.uid()
+    or exists (
+      select 1 from public.space_members m_self
+      join public.space_members m_other on m_other.space_id = m_self.space_id
+      where m_self.user_id = auth.uid() and m_other.user_id = p_user
+    );
+$$;
+grant execute on function public.is_connected(uuid) to authenticated;
+revoke execute on function public.is_connected(uuid) from public;
+
+-- 6-2) entries/posts/rules の select を つながりベースに。書き込みは owner 本人のみ(space非依存)。
+drop policy if exists entries_select_member    on public.entries;
+drop policy if exists entries_select_connected on public.entries;
+create policy entries_select_connected on public.entries for select using (is_connected(owner));
+drop policy if exists entries_insert_owner on public.entries;
+create policy entries_insert_owner on public.entries for insert with check (owner = auth.uid());
+
+drop policy if exists posts_select_member    on public.posts;
+drop policy if exists posts_select_connected on public.posts;
+create policy posts_select_connected on public.posts for select using (is_connected(owner));
+drop policy if exists posts_insert_owner on public.posts;
+create policy posts_insert_owner on public.posts for insert with check (owner = auth.uid());
+
+drop policy if exists rules_select_visible   on public.rules;
+drop policy if exists rules_select_connected on public.rules;
+create policy rules_select_connected on public.rules for select
+  using (owner = auth.uid() or (pub and is_connected(owner)));
+drop policy if exists rules_insert_owner on public.rules;
+create policy rules_insert_owner on public.rules for insert with check (owner = auth.uid());
+
+-- 6-3) public_profiles: 他人に見せる安全な窓(nickname/photo)。つながっている人だけ・anon非公開。
+create or replace view public.public_profiles as
+  select u.id, u.nickname, u.photo from public.users u where is_connected(u.id);
+revoke all on public.public_profiles from anon;
+grant select on public.public_profiles to authenticated;
+
+-- 6-4) invitations: グループ招待コード(hex12・既定24h・人数無制限)。参加は join_space_with_code のみ。
+create table if not exists public.invitations (
+  id         uuid primary key default gen_random_uuid(),
+  space_id   uuid not null references public.spaces(id) on delete cascade,
+  created_by uuid not null references public.users(id)  on delete cascade,
+  code       text not null unique default encode(gen_random_bytes(6),'hex'),
+  expires_at timestamptz not null default (now() + interval '24 hours'),
+  created_at timestamptz not null default now()
+);
+create index if not exists invitations_code_idx on public.invitations (code);
+alter table public.invitations enable row level security;
+drop policy if exists inv_select_member on public.invitations;
+create policy inv_select_member on public.invitations for select using (is_space_member(space_id));
+drop policy if exists inv_insert_member on public.invitations;
+create policy inv_insert_member on public.invitations for insert with check (created_by = auth.uid() and is_space_member(space_id));
+drop policy if exists inv_delete_member on public.invitations;
+create policy inv_delete_member on public.invitations for delete using (is_space_member(space_id));
+grant select, insert, delete on public.invitations to authenticated;
+
+-- space_members の自己追加は「自分が作成したグループのみ」に厳格化(他は招待経由のみ)
+drop policy if exists members_insert_self on public.space_members;
+create policy members_insert_self on public.space_members for insert with check (
+  user_id = auth.uid()
+  and exists (select 1 from public.spaces s where s.id = space_id and s.created_by = auth.uid())
+);
+
+-- 参加の唯一の入口(コード検証→自分をメンバー追加)。anon実行不可。
+create or replace function public.join_space_with_code(p_code text)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare v_space uuid;
+begin
+  select space_id into v_space from public.invitations where code = p_code and expires_at > now();
+  if v_space is null then raise exception 'invalid or expired code'; end if;
+  insert into public.space_members (space_id, user_id, role)
+    values (v_space, auth.uid(), 'member') on conflict (space_id, user_id) do nothing;
+  return v_space;
+end; $$;
+grant execute on function public.join_space_with_code(text) to authenticated;
+revoke execute on function public.join_space_with_code(text) from public;
+
+-- =============================================================
+-- 完了(v2: つながり型)。
 -- =============================================================
