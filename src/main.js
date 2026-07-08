@@ -175,7 +175,8 @@ function renderFeed(){
     list.innerHTML=`<div class="text-center py-14 rounded-2xl bg-card border border-dashed border-line">
       <p class="text-[28px]">🌱</p>
       <p class="text-[13px] text-faint font-bold mt-2">まだ投稿はありません</p>
-      <p class="text-[11px] text-faint mt-1">運動を記録すると、ここに届きます</p>
+      <p class="text-[11px] text-faint mt-1">運動を記録するか、招待コードで仲間とつながると、ここに届きます</p>
+      <button class="open-connect pop mt-3 text-[12px] font-extrabold text-accent border border-aline bg-asoft rounded-full px-4 py-2">招待コードで参加</button>
     </div>`;
     return;
   }
@@ -1086,6 +1087,7 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#settingsClose')||e.target.closest('#settingsScrim')) closeSettings();
   if(e.target.closest('#settingsTour')){ closeSettings(); openTour(); }
   if(e.target.closest('#settingsLogout')){ closeSettings(); supabase.auth.signOut(); }
+  if(e.target.closest('.open-connect')) openSettings();   // 新規ログイン後の参加入口→設定「つながる」欄へ
   if(e.target.closest('#genInvite')) onGenInvite();
   if(e.target.closest('#copyInvite')) onCopyInvite();
   if(e.target.closest('#joinBtn')) onJoin();
