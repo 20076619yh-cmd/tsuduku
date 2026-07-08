@@ -111,13 +111,13 @@ export async function loadPublicProfiles(){
   return data || [];
 }
 
-// Read every row visible in the space and map to the app's in-memory shapes.
-// Empty in Phase 3a; write-back (and dur_sec ↔ label reconciliation) finalizes in 3b.
-export async function loadAll(spaceId){
+// つながり型: 予定/記録/自分ルールは本人のみ(personal)、posts は自分＋つながり(RLSが範囲を担保)=1本タイムライン。
+// space_id では絞らない(可視性は RLS の is_connected(owner) が判定)。
+export async function loadAll(){
   const [e, p, r] = await Promise.all([
-    supabase.from('entries').select('*').eq('space_id', spaceId),
-    supabase.from('posts').select('*').eq('space_id', spaceId).order('created_at', { ascending: false }),
-    supabase.from('rules').select('*').eq('space_id', spaceId),
+    supabase.from('entries').select('*').eq('owner', _uid),                        // 予定/記録=本人のみ
+    supabase.from('posts').select('*').order('created_at', { ascending: false }),  // 自分＋つながり=タイムライン
+    supabase.from('rules').select('*').eq('owner', _uid),                          // 自分ルール=本人のみ
   ]);
   if(e.error) throw e.error;
   if(p.error) throw p.error;

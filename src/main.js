@@ -1090,10 +1090,12 @@ async function initApp(session){
     (await loadPublicProfiles()).forEach(p=>{
       if(!members[p.id]) members[p.id]={ name:p.nickname||'', ini:firstCP(p.nickname), c:'#14B87C', photo:p.photo };
     });
-    const data = await loadAll(spaceId);
+    const data = await loadAll();
     logEntries.push(...data.entries);
     posts.push(...data.posts);
     limits.push(...data.rules);
+    // つながり相手の投稿ownerが members に無ければニュートラル補完(表示が落ちないように)
+    posts.forEach(p=>{ if(p.who && !members[p.who]) members[p.who]={ name:'メンバー', ini:'?', c:'#9AA09A', photo:null }; });
   }catch(err){
     console.error('bootstrap/load failed:', err.message || err);
   }
