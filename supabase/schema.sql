@@ -301,8 +301,12 @@ drop policy if exists rules_insert_owner on public.rules;
 create policy rules_insert_owner on public.rules for insert with check (owner = auth.uid());
 
 -- 6-3) public_profiles: 他人に見せる安全な窓(nickname/photo)。つながっている人だけ・anon非公開。
-create or replace view public.public_profiles as
-  select u.id, u.nickname, u.photo from public.users u where is_connected(u.id);
+--   security_invoker=false(定義者/owner権限)で users の self-only RLS を迂回し、安全な列だけを
+--   「自分＋つながっている全員」ぶん返す。invoker だと users_select_self で自分1行に絞られ相手が返らない。
+drop view if exists public.public_profiles;
+create view public.public_profiles
+  with (security_invoker = false)
+  as select u.id, u.nickname, u.photo from public.users u where is_connected(u.id);
 revoke all on public.public_profiles from anon;
 grant select on public.public_profiles to authenticated;
 

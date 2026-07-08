@@ -2,7 +2,7 @@
 import './style.css';
 import Chart from 'chart.js/auto';   // auto = same all-controllers registration as the old UMD CDN
 import { supabase } from './supabase.js';
-import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler, markTourDone, loadPublicProfiles, createInvite, joinWithCode } from './db.js';
+import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler, markTourDone, loadPublicProfiles, loadPublicRules, createInvite, joinWithCode } from './db.js';
 
 /* ---------- members ---------- */
 // Flat initial state: just me. Friends arrive in the backend/sharing phase (I/I2).
@@ -35,9 +35,10 @@ const tagDot = {
   '胸トレ':'#FF6A3D','背中':'#3E86C9','脚':'#7C6CD0',
   '肩':'#E0A53A','腕':'#B5836A','有酸素':'#14B87C','ストレッチ':'#5FB6A8','休養':'#9AA09A'
 };
-function avatar(m,size=40){
-  if(m.photo) return `<div style="width:${size}px;height:${size}px;background-image:url('${m.photo}');background-size:cover;background-position:center" class="avatar-btn cursor-pointer rounded-full shrink-0"></div>`;
-  return `<div style="width:${size}px;height:${size}px;background:${m.c}" class="avatar-btn cursor-pointer rounded-full flex items-center justify-center text-white font-bold shrink-0"><span style="font-size:${Math.round(size*0.4)}px">${m.ini}</span></div>`;
+function avatar(m,size=40,who=''){
+  const du = who ? ` data-user="${who}"` : '';   // タップ相手を特定するため
+  if(m.photo) return `<div${du} style="width:${size}px;height:${size}px;background-image:url('${m.photo}');background-size:cover;background-position:center" class="avatar-btn cursor-pointer rounded-full shrink-0"></div>`;
+  return `<div${du} style="width:${size}px;height:${size}px;background:${m.c}" class="avatar-btn cursor-pointer rounded-full flex items-center justify-center text-white font-bold shrink-0"><span style="font-size:${Math.round(size*0.4)}px">${m.ini}</span></div>`;
 }
 function chip(tag,status){
   const dot=tagDot[tag]||'#9AA09A';
@@ -194,7 +195,7 @@ function renderFeed(){
     return `
     <article class="rounded-2xl bg-card border border-line shadow-card overflow-hidden">
       <div class="flex items-center gap-3 px-4 pt-3.5">
-        ${avatar(m,38)}
+        ${avatar(m,38,p.who)}
         <div class="flex-1">
           <p class="text-[14px] font-extrabold text-ink leading-none">${m.name}</p>
           <p class="text-[11px] text-faint mt-1">${relTime(p.createdAt)}</p>
@@ -336,7 +337,7 @@ function workoutCard(p){
   const sh=memberShare[p.who]||{};
   const wtLine = sh.wt ? `<span class="text-[11px] font-bold ${sh.wt.startsWith('▼')?'text-accent':'text-sub'}">${sh.wt}</span>` : '';
   return `<div class="entry-edit pop cursor-pointer flex items-center gap-3 rounded-2xl bg-card border border-line shadow-card p-3.5 ${s.dim?'opacity-60':''}" data-id="${p.id}">
-    ${avatar(m,40)}
+    ${avatar(m,40,p.who)}
     <div class="flex-1">
       <div class="flex flex-wrap items-center gap-1.5">
         <span class="text-[14px] font-extrabold text-ink">${m.name}</span>${(p.tags||[]).map(t=>chip(t)).join('')}
@@ -671,7 +672,7 @@ function renderGroup(){
   row.innerHTML = groupWeek.map(g=>{
     const m=members[g.who]; const pct=Math.round(g.d/7*100);
     return `<div class="flex items-center gap-3">
-      ${avatar(m,26)}
+      ${avatar(m,26,g.who)}
       <span class="text-[12px] font-bold text-ink w-11">${m.name}</span>
       <div class="flex-1 h-1.5 rounded-full bg-[#F0EFEB] overflow-hidden"><div class="h-full rounded-full" style="width:${pct}%;background:${m.c}"></div></div>
       <span class="text-[12px] font-extrabold text-sub w-8 text-right">${g.d}日</span>
@@ -857,17 +858,24 @@ function closeProfile(){
   document.getElementById('profileScrim').classList.add('hidden');
 }
 // 閲覧用プロフィールカード(nickname/アバター＋公開ルール最大3つと🔥日数)。今は自分のみ、他人参照はPhase 4。
-function openProfileCard(){
-  const m=members[CURRENT_USER]||{};
+function pcRuleRow(l){
+  return `<div class="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2"><span class="text-[14px]">${l.emoji||'🎯'}</span><span class="flex-1 text-[13px] font-bold text-ink truncate">${l.label}</span>${l.streakStart?`<span class="text-[11px] font-extrabold text-accent whitespace-nowrap">🔥${ruleStreak(l)}日目</span>`:''}</div>`;
+}
+// タップされた相手のカードを表示。自分=own limits、相手=公開ルールをその都度取得(rules RLSがpub＋つながりを担保)。
+async function openProfileCard(userId){
+  const id = userId || CURRENT_USER;
+  const m = members[id] || {};
   applyAvatarEl(document.getElementById('pcAvatar'), m);
   const nm=document.getElementById('pcName'); if(nm) nm.textContent=m.name||'';
-  const pub=limits.filter(l=>l.pub).slice(0,3);
   const el=document.getElementById('pcRules');
-  if(el) el.innerHTML = pub.length
-    ? pub.map(l=>`<div class="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2"><span class="text-[14px]">${l.emoji}</span><span class="flex-1 text-[13px] font-bold text-ink truncate">${l.label}</span>${l.streakStart?`<span class="text-[11px] font-extrabold text-accent whitespace-nowrap">🔥${ruleStreak(l)}日目</span>`:''}</div>`).join('')
-    : `<p class="text-[12px] text-faint text-center py-3">公開中の自分ルールはありません</p>`;
+  if(el) el.innerHTML=`<p class="text-[12px] text-faint text-center py-3">…</p>`;
   document.getElementById('pcScrim').classList.remove('hidden');
   document.getElementById('pcSheet').classList.add('open');
+  const rules = id===CURRENT_USER ? limits.filter(l=>l.pub) : await loadPublicRules(id);
+  const pub = rules.filter(l=>l.streakStart).slice(0,3);
+  if(el) el.innerHTML = pub.length
+    ? pub.map(pcRuleRow).join('')
+    : `<p class="text-[12px] text-faint text-center py-3">公開中のルールはありません</p>`;
 }
 function closeProfileCard(){
   document.getElementById('pcSheet').classList.remove('open');
@@ -1023,7 +1031,7 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#ruleXEnd')) endRule();
   if(e.target.closest('#ruleXCancel')||e.target.closest('#ruleXScrim')) closeRuleX();
   if(e.target.closest('.meal-add')) openSheet('meal', TODAY);   // 本日の食事カード → TODAY固定
-  if(e.target.closest('.avatar-btn')) openProfileCard();   // アバタータップ→プロフィールカード(自分)
+  { const ab=e.target.closest('.avatar-btn'); if(ab) openProfileCard(ab.dataset.user); }   // タップされた相手のカード
   if(e.target.closest('#pcClose')||e.target.closest('#pcScrim')) closeProfileCard();
   const eedit=e.target.closest('.entry-edit'); if(eedit && !e.target.closest('.avatar-btn')) openSheetEdit(eedit.dataset.id);
   if(e.target.closest('#sheetDelete')) deleteEntry();

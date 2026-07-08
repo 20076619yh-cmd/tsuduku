@@ -102,6 +102,13 @@ export async function saveProfileRow(userId, profile, maintenanceKcal){
   if(error) throw error;
 }
 
+// つながり相手の公開ルール(プロフィールカード用)。rules RLS が pub＋is_connected を担保。
+export async function loadPublicRules(userId){
+  const { data, error } = await supabase.from('rules').select('*').eq('owner', userId).eq('pub', true);
+  if(error){ console.error('loadPublicRules failed:', error.message || error); return []; }
+  return (data || []).map(mapRule);
+}
+
 // つながる(グループ招待): 自グループの招待コードを発行(既定24h・使用回数無制限)。
 export async function createInvite(spaceId){
   const { data, error } = await supabase.from('invitations')
