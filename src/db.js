@@ -102,6 +102,20 @@ export async function saveProfileRow(userId, profile, maintenanceKcal){
   if(error) throw error;
 }
 
+// つながる(グループ招待): 自グループの招待コードを発行(既定24h・使用回数無制限)。
+export async function createInvite(spaceId){
+  const { data, error } = await supabase.from('invitations')
+    .insert({ space_id: spaceId, created_by: _uid }).select('code, expires_at').single();
+  if(error){ console.error('createInvite failed:', error.message || error); return null; }
+  return data;   // { code, expires_at }
+}
+// 招待コードで参加(唯一の入口)。成功で参加した space_id を返す・無効/期限切れは throw。
+export async function joinWithCode(code){
+  const { data, error } = await supabase.rpc('join_space_with_code', { p_code: code });
+  if(error) throw error;
+  return data;   // space_id
+}
+
 // Phase 4a: 公開プロフィール(安全な窓)。他人に見せてよい最小限(id/nickname/photo)だけ。
 // selectは同スペースのメンバーに限定(ビュー側で is_space_member 判定)・anon非公開。
 // 生の体重/体脂肪/身長/メンテ/設定は含まれない。今は自分の行のみ返る。

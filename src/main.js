@@ -2,7 +2,7 @@
 import './style.css';
 import Chart from 'chart.js/auto';   // auto = same all-controllers registration as the old UMD CDN
 import { supabase } from './supabase.js';
-import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler, markTourDone, loadPublicProfiles } from './db.js';
+import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler, markTourDone, loadPublicProfiles, createInvite, joinWithCode } from './db.js';
 
 /* ---------- members ---------- */
 // Flat initial state: just me. Friends arrive in the backend/sharing phase (I/I2).
@@ -872,6 +872,22 @@ function openNotify(){ document.getElementById('notifyScrim').classList.remove('
 function closeNotify(){ document.getElementById('notifySheet').classList.remove('open'); document.getElementById('notifyScrim').classList.add('hidden'); }
 function openSettings(){ closeProfile(); document.getElementById('settingsScrim').classList.remove('hidden'); document.getElementById('settingsSheet').classList.add('open'); }
 function closeSettings(){ document.getElementById('settingsSheet').classList.remove('open'); document.getElementById('settingsScrim').classList.add('hidden'); }
+// つながる(グループ招待): コード発行/コピー/参加。参加成功で再ロードしてタイムラインに反映。
+let lastInviteCode=null;
+async function onGenInvite(){
+  const inv=await createInvite(SPACE_ID);
+  if(!inv){ showToast('招待コードの発行に失敗しました。通信を確認してください'); return; }
+  lastInviteCode=inv.code;
+  document.getElementById('inviteCode').textContent=inv.code;
+  document.getElementById('inviteCodeBox').classList.remove('hidden');
+}
+function onCopyInvite(){ if(lastInviteCode && navigator.clipboard){ navigator.clipboard.writeText(lastInviteCode); showToast('コピーしました'); } }
+async function onJoin(){
+  const code=(document.getElementById('joinCodeInput').value||'').trim();
+  if(!code) return;
+  try{ await joinWithCode(code); showToast('参加しました'); setTimeout(()=>location.reload(), 700); }
+  catch(err){ console.error('join failed:', err.message||err); showToast('コードが無効か期限切れです'); }
+}
 // 初回オンボーディングツアー。各ステップで対象要素をハイライトし、その近くに吹き出しを出す。
 // target=対象のCSSセレクタ(nullは中央表示)。文言は後で磨く前提のドラフト。
 // 6ステップ確定版。文言はプロダクトオーナー(開発者本人)指定を一字一句そのまま表示する。
@@ -1070,6 +1086,9 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#settingsClose')||e.target.closest('#settingsScrim')) closeSettings();
   if(e.target.closest('#settingsTour')){ closeSettings(); openTour(); }
   if(e.target.closest('#settingsLogout')){ closeSettings(); supabase.auth.signOut(); }
+  if(e.target.closest('#genInvite')) onGenInvite();
+  if(e.target.closest('#copyInvite')) onCopyInvite();
+  if(e.target.closest('#joinBtn')) onJoin();
   // #tourNext/#tourSkip はツアー中のみ存在し、上部のガードで処理する
 });
 // live maintenance preview while editing the profile sheet
