@@ -121,7 +121,9 @@ export async function loadPublicRules(userId){
 export async function createInvite(spaceId){
   const { data, error } = await supabase.rpc('generate_invite', { p_space_id: spaceId });
   if(error){ console.error('createInvite failed:', error.message || error); return null; }
-  return data;   // invitations 行(code, expires_at, ...)
+  // RETURNS public.invitations は PostgREST が「配列」で返す場合がある → 配列/オブジェクト両対応で正規化。
+  const row = Array.isArray(data) ? data[0] : data;
+  return row || null;   // { code, expires_at, ... }
 }
 // 招待コードで参加(唯一の入口)。成功で参加した space_id を返す・無効/期限切れは throw。
 export async function joinWithCode(code){

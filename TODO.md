@@ -49,6 +49,12 @@ Phase 1 ✅ / Phase 2 ✅ / Phase 3a ✅ / Phase 3b ✅ / Day 3(A-D) ✅ / **ア
 - [ ] 利用規約・プライバシーポリシー作成(データガバナンス方針・目的列挙方式。管理者アクセス/機密非保持/データ提供同意/広告/退会時削除) 【前提・家族以外を入れる前に必須】
 - [ ] 初回ログイン時の規約同意フロー(同意チェック→利用開始) 【規約とセット】
 
+## DB整合性・要調査（招待/ブートストラップ関連）
+- [x] 招待コードが発行後に画面に出ない: generate_invite の RETURNS public.invitations を PostgREST が配列で返す場合があり `inv.code` が取れなかった → createInvite で配列/オブジェクト両対応に正規化＋コード大きく表示＋コピーをtry/catch＋選択フォールバックに
+- [ ] **[要SQL] space_members insert の RLS 穴**: `members_insert_self` の `exists(select 1 from spaces ...)` サブクエリが spaces のRLS(is_space_member)で弾かれ、**owner自身の初回メンバー行が作れない**(まだメンバーでないため spaces 行が見えない)。bootstrap再作成時に `new row violates RLS policy for space_members` が出る。→ SECURITY DEFINER の `is_space_creator(space_id)` を新設し policy をそれ経由に(下記SQL・人間が実行)
+- [x] Console: `markTourDone failed: uuid "boy"` = bootstrap失敗でCURRENT_USERが初期値'boy'のままツアーが走っていた → bootstrap失敗時(CURRENT_USER==='boy')はツアーを出さないガード＋失敗トースト追加(根治は上のRLS SQL)
+- [ ] **invites(invitations)テーブルが本番から2度消えた原因究明**: schema.sqlに drop table は無いが、invitations/space_members/entries/posts/rules は全て `space_id → spaces(id) on delete cascade`。**spacesの行/テーブルを削除・再作成すると全部カスケード削除される**のが最有力(手動のdrop/recreate時)。恒久策=spacesを安易に触らない運用＋schema.sqlを唯一の正として冪等再適用。Supabaseのログ(Database→Logs)でdrop/deleteの実行者・時刻を確認する
+
 ## 4c周辺で出た細部バグ・保留（すぐ〜中規模）
 - [x] タイムラインヘッダ「きょう ◯件」= 今日(created_at・JST)の投稿だけ数える(A案)。意味=つながり全体の今日の投稿数。※原因は日付バグではなく未push旧コードを見ていた点も判明
 - [x] ルール併記の単位「◯日目」を全廃し「ルール名 🔥数字」に統一(Snapchat式・🔥と数字は隣接)。タイムライン/自分ルール/プロフィールカードの3箇所＋自分ルールに「🔥＝続いた日数」の補足。※確認ボタン「また1日目から育てる」の文章は温存(要判断で消せる)

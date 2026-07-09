@@ -1112,12 +1112,22 @@ function closeSettings(){ document.getElementById('settingsSheet').classList.rem
 let lastInviteCode=null;
 async function onGenInvite(){
   const inv=await createInvite(SPACE_ID);
-  if(!inv){ showToast('招待コードの発行に失敗しました。通信を確認してください'); return; }
-  lastInviteCode=inv.code;
-  document.getElementById('inviteCode').textContent=inv.code;
+  const code = inv && inv.code;
+  if(!code){ console.error('invite: コードを取り出せません', inv); showToast('招待コードの発行に失敗しました。通信を確認してください'); return; }
+  lastInviteCode=code;
+  document.getElementById('inviteCode').textContent=code;
   document.getElementById('inviteCodeBox').classList.remove('hidden');
 }
-function onCopyInvite(){ if(lastInviteCode && navigator.clipboard){ navigator.clipboard.writeText(lastInviteCode); showToast('コピーしました'); } }
+async function onCopyInvite(){
+  if(!lastInviteCode) return;
+  try{ await navigator.clipboard.writeText(lastInviteCode); showToast('コピーしました'); }
+  catch(err){
+    // clipboard API不可(古い環境/権限)時はコード文字列を選択状態にして手動コピーを促す
+    const el=document.getElementById('inviteCode');
+    if(el){ const r=document.createRange(); r.selectNodeContents(el); const s=window.getSelection(); s.removeAllRanges(); s.addRange(r); }
+    showToast('コードを選択しました。長押しでコピーしてください');
+  }
+}
 async function onJoin(){
   const code=(document.getElementById('joinCodeInput').value||'').trim();
   if(!code) return;
@@ -1360,6 +1370,7 @@ async function initApp(session){
     reactionRows = await loadReactions();
   }catch(err){
     console.error('bootstrap/load failed:', err.message || err);
+    showToast('読み込みに失敗しました。再読み込みしてください');
   }
   renderFeedAvatars(); renderFeed(); renderWeek(); renderDayList(); renderGroup();
   renderMeal(); renderLimits(); renderMonth(); renderMaintCaption(); renderStartBar(); renderStats();
@@ -1367,7 +1378,8 @@ async function initApp(session){
   showPage('schedule');   // app opens on 予定 (also reveals the 運動開始 bar)
   // 初回のみ自動表示。既にデータがある既存ユーザーには突然出さない(手動再表示は設定/🔔から)
   const hasData = logEntries.length>0 || posts.length>0 || limits.length>0;
-  if(!profile.tourDone && !hasData) openTour();
+  // bootstrap失敗時は CURRENT_USER が 'boy'(初期値)のまま=ツアーを出さない(markTourDoneに"boy"が渡り uuid エラーになるのを防ぐ)
+  if(!profile.tourDone && !hasData && CURRENT_USER!=='boy') openTour();
 
 }
 
