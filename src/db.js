@@ -6,6 +6,9 @@ import { supabase } from './supabase.js';
 // owner + space resolved once in bootstrap, reused by the write helpers so call sites
 // in main.js stay terse (single space / single user through Phase 3).
 let _uid = null, _spaceId = null;
+// uid は常に auth の UUID。旧デモ既定値 "boy" 等の非UUIDが渡ったら弾く(防御的)。
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function isUuid(s){ return typeof s === 'string' && UUID_RE.test(s); }
 // 保存失敗の共通通知(main.jsがトースト表示を登録)。console.error＋UI通知を一箇所に。
 let _onSaveError = null;
 export function setSaveErrorHandler(fn){ _onSaveError = fn; }
@@ -23,6 +26,7 @@ function durLabel(sec){
 // RLS lets each insert through because id/created_by/user_id all equal auth.uid().
 export async function bootstrap(session){
   const uid = session.user.id;
+  if(!isUuid(uid)) throw new Error('bootstrap: session uid が UUID でない: ' + uid);   // 防御(旧"boy"等を弾く)
   const meta = session.user.user_metadata || {};
   const defaultNick =
     meta.full_name || meta.name || (session.user.email || '').split('@')[0] || 'you';
@@ -89,6 +93,7 @@ export async function saveSettings(userId, settings){
 }
 // ツアー完了を保存。列(tour_done)未追加でも致命ではないので console.error のみ(トーストは出さない)。
 export async function markTourDone(userId){
+  if(!isUuid(userId)){ console.error('markTourDone: invalid uid(スキップ):', userId); return; }   // "boy"等を弾く
   const { error } = await supabase.from('users').update({ tour_done: true }).eq('id', userId);
   if(error) console.error('markTourDone failed:', error.message || error);
 }
@@ -121,9 +126,9 @@ export async function loadPublicRules(userId){
 export async function createInvite(spaceId){
   const { data, error } = await supabase.rpc('generate_invite', { p_space_id: spaceId });
   if(error){ console.error('createInvite failed:', error.message || error); return null; }
-  // RETURNS public.invitations は PostgREST が「配列」で返す場合がある → 配列/オブジェクト両対応で正規化。
+  // generate_invite は json(code,expires_at)を返す。念のため配列/オブジェクト両対応で正規化。
   const row = Array.isArray(data) ? data[0] : data;
-  return row || null;   // { code, expires_at, ... }
+  return row || null;   // { code, expires_at }
 }
 // 招待コードで参加(唯一の入口)。成功で参加した space_id を返す・無効/期限切れは throw。
 export async function joinWithCode(code){

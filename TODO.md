@@ -30,7 +30,8 @@ Phase 1 ✅ / Phase 2 ✅ / Phase 3a ✅ / Phase 3b ✅ / Day 3(A-D) ✅ / **ア
 - [x] 4c つながり隔離テスト合格(①非つながりは不可視 ②同グループは投稿/公開ルール/公開profile可視 ③生体重/体脂肪/非公開ルールは常に不可視)
 - [x] グループ管理: メンバー排除(ownerのみ)＋自己離脱をRLS2経路(members_delete_by_owner/members_leave_self・owner自己排除不可=孤児化防止)＋メンバー一覧UI(外す/抜ける/確認シート)。排除はno-shame(通知なし・is_connected falseで相手投稿が自然に消滅)
 - [x] ボトムシート排他制御(常に1枚): closeAllSheetsで開く前に他を全閉じ・tagOther等は親に復帰。3枚重なりバグの根治
-- [x] 休養(rest)を独立ステータス化(type='rest'・スレート#8993A8・🌙休養日): 予定シートの🌙排他トグル／運動集計から除外／休養日はタイマー非表示／宣言して休めばストリーク維持(CLAUDE.md設計判断)。RLSは運動宣言と同じくつながりに共有。SQL(entries type CHECK＋RLS)実行済
+- [x] 休養(rest)を独立ステータス化(type='rest'・スレート#8993A8・🌙休養日): 予定シートの🌙排他トグル／運動集計から除外／宣言して休めばストリーク維持(CLAUDE.md設計判断)。RLSは運動宣言と同じくつながりに共有。SQL(entries type CHECK＋RLS)実行済
+- [x] 休養日のタイマー: 前判断(非表示)を実地で撤回→**休養日でもタイマー常時使用可**(休養は宣言であって禁止でない)。休養日に運動開始したら休養→運動に切替(rest→workout・1日1予定維持・「休養日なのに実施済み」矛盾を解消)。CLAUDE.md設計判断に撤回を明記
 - [x] 「＋その他」インライン化(シート廃止=重なり根治)＋部位未選択スタート＋部位なし許可(「運動」既定ラベル)
 - [x] カスタム部位: users.settings(jsonb)に永続化(次回も選択肢)・色はハッシュ安定割当(同名同色)・チップ×で即削除・選択スタイル明確化(色塗り＋内枠)。※settings列は既存を確認して相乗り(custom_tagsは実在せず保存失敗した経緯→CLAUDE.md技術判断)
 - [x] 1日1予定: 既存予定がある日は「＋追記」→「編集」導線(重複作成させない)。記録(体重/食事)は別枠
@@ -51,7 +52,9 @@ Phase 1 ✅ / Phase 2 ✅ / Phase 3a ✅ / Phase 3b ✅ / Day 3(A-D) ✅ / **ア
 
 ## DB整合性・要調査（招待/ブートストラップ関連）
 - [x] 招待コードが発行後に画面に出ない: generate_invite の RETURNS public.invitations を PostgREST が配列で返す場合があり `inv.code` が取れなかった → createInvite で配列/オブジェクト両対応に正規化＋コード大きく表示＋コピーをtry/catch＋選択フォールバックに
-- [ ] **[要SQL] space_members insert の RLS 穴**: `members_insert_self` の `exists(select 1 from spaces ...)` サブクエリが spaces のRLS(is_space_member)で弾かれ、**owner自身の初回メンバー行が作れない**(まだメンバーでないため spaces 行が見えない)。bootstrap再作成時に `new row violates RLS policy for space_members` が出る。→ SECURITY DEFINER の `is_space_creator(space_id)` を新設し policy をそれ経由に(下記SQL・人間が実行)
+- [x] space_members insert の RLS 穴: `members_insert_self` の spaces サブクエリが spaces のRLS(is_space_member)で弾かれ owner初回メンバー行が作れなかった → SECURITY DEFINER `is_space_creator()` 経由に(schema.sql反映済・下記マイグレーションSQLに同梱・人間が実行)
+- [x] 招待テーブルを invites に一本化: 本番に invites(列不完全)と invitations が並存していたのをRESTプローブで確認 → 両方dropしてinvites再作成・generate_invite(json戻り)・join_space_with_code を invites 参照に統一。schema.sql反映済(マイグレーションSQLを人間が実行)
+- [x] "boy"混入の防御: localStorageは未使用(boyはコード初期値でbootstrap失敗時のみ残留)。uidをUUID検証(isUuid)しmarkTourDone/bootstrapで非UUIDを弾く＋ツアーガード。根治はbootstrap成功(上のRLS修正)
 - [x] Console: `markTourDone failed: uuid "boy"` = bootstrap失敗でCURRENT_USERが初期値'boy'のままツアーが走っていた → bootstrap失敗時(CURRENT_USER==='boy')はツアーを出さないガード＋失敗トースト追加(根治は上のRLS SQL)
 - [ ] **invites(invitations)テーブルが本番から2度消えた原因究明**: schema.sqlに drop table は無いが、invitations/space_members/entries/posts/rules は全て `space_id → spaces(id) on delete cascade`。**spacesの行/テーブルを削除・再作成すると全部カスケード削除される**のが最有力(手動のdrop/recreate時)。恒久策=spacesを安易に触らない運用＋schema.sqlを唯一の正として冪等再適用。Supabaseのログ(Database→Logs)でdrop/deleteの実行者・時刻を確認する
 
@@ -76,7 +79,12 @@ Phase 1 ✅ / Phase 2 ✅ / Phase 3a ✅ / Phase 3b ✅ / Day 3(A-D) ✅ / **ア
 - [ ] リアクションの永続化
 - [ ] リアルタイム同期
 - [ ] PWA化(ホーム画面追加)
-- [ ] Capacitorネイティブ化＋ストア申請(App Store/Google Play)。プッシュ通知の本実装も同時期(Capacitor経由) 【実用テスト成功後・CLAUDE.md「ストア配布への道筋」参照】
+- [x] タイマーのバックグラウンド応急処置: 経過は started_at(壁時計)から毎回算出=setInterval間引き/スリープでも狂わない。visibilitychangeで即補正。タブを閉じて開き直しても未終了エントリ(今日・done前)から「トレーニング中(◯分経過)」を復元(restoreActiveTimer)
+- [ ] **【ネイティブ化の優先度=当初想定より高い】**次の3点が揃って初めて「実用に耐えるアプリ」になる。いずれもWeb/PWAでは不完全でCapacitorネイティブ化(Foreground Service / Live Activity)が必要:
+  - バックグラウンドでのタイマー継続・通知領域への常時表示(「トレーニング中 23:45」)・ロック画面表示
+  - LINE等アプリ内ブラウザでのGoogleログイン不可(403)の解決
+  - OSプッシュ通知(3種=トレ開始/投稿/リアクション)
+- [ ] Capacitorネイティブ化＋ストア申請(App Store/Google Play)。プッシュ通知の本実装も同時期(Capacitor経由) 【実用テスト成功後・CLAUDE.md「ストア配布への道筋」参照・上記3点で優先度UP】
 - [ ] 無音シャッターでの撮影: Web版はOS標準カメラの音を制御できず不可→Capacitorで独自カメラ(Snapchat/Instagram方式) 【Capacitor時】
 - [ ] 商標確認・名称最終決定(J-PlatPatで「fit tree」等の商標調査。必要なら改称) 【ストア公開前】
 - [ ] データのCSV/JSONエクスポート(個人情報と運動データを分離。事業/売却視野の本格設計は別) 【横断・将来】

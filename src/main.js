@@ -86,7 +86,10 @@ function createPost({kind='workout', who=CURRENT_USER, tags=[], dur=null, durSec
 function addPost(p){ posts.unshift(p); renderFeed(); upsertPost(p); }
 
 /* ---------- workout timer (E2) + post flow (E) ---------- */
-let timerRunning=false, timerSec=0, timerInterval=null, timerTags=[];
+// タイマーは「経過秒」を刻まず、started_at(壁時計)から毎回算出する=バックグラウンド/タブ復帰/再読込でも狂わない。
+let timerRunning=false, timerStartedAt=null, timerInterval=null, timerTags=[];
+function elapsedSec(){ return timerStartedAt ? Math.max(0, Math.floor((Date.now()-new Date(timerStartedAt).getTime())/1000)) : 0; }
+function updateTimerDisp(){ const d=document.getElementById('timerDisp'); if(d) d.textContent=fmtTimer(elapsedSec()); }
 let timerFromPlan=false;    // true=今日の予定から開始（既存エントリを更新）／false=予定なし開始（新規追加）
 let activeEntryIds=[];      // タイマー作動中に「実施中」表示する予定エントリのid(UI専用・非永続)
 let startTags=[];           // category-select (no-plan start)
@@ -98,24 +101,21 @@ function renderStartBar(){
   const el=document.getElementById('startBarInner'); if(!el) return;
   if(timerRunning){
     el.innerHTML=`<div class="bg-card border border-aline rounded-full shadow-lift pl-5 pr-2 py-2 flex items-center gap-3">
-         <span class="flex items-center gap-2 text-[14px] font-extrabold text-ink"><span class="w-2 h-2 rounded-full bg-accent animate-pulse"></span><span id="timerDisp">${fmtTimer(timerSec)}</span></span>
+         <span class="flex items-center gap-2 text-[14px] font-extrabold text-ink"><span class="w-2 h-2 rounded-full bg-accent animate-pulse"></span><span id="timerDisp">${fmtTimer(elapsedSec())}</span></span>
          <span class="text-[11px] font-bold text-sub truncate max-w-[110px]">${timerTags.join('・')}</span>
          <button class="stop-workout pop bg-accent text-white text-[12px] font-extrabold rounded-full px-4 py-2">運動終了</button>
        </div>`;
     return;
   }
-  // 休養日(今日がrestで運動予定なし)はタイマーを出さず、静かに「休養日」表示(ノーシェイム=計画的回復)。
-  // 気が変わって運動したくなったら予定に部位を足せばタイマーが戻る。
-  const todayWorkout=logEntries.some(e=>e.type==='workout'&&e.who===CURRENT_USER&&e.date===TODAY);
-  const todayRest=logEntries.some(e=>e.type==='rest'&&e.who===CURRENT_USER&&e.date===TODAY);
-  el.innerHTML = (todayRest && !todayWorkout)
-    ? `<div class="bg-card border border-line rounded-full shadow-lift px-6 py-3 flex items-center gap-2 text-[13px] font-extrabold" style="color:${REST_COLOR}"><span>🌙</span>今日は休養日</div>`
-    : `<button class="start-workout pop bg-accent text-white text-[13px] font-extrabold rounded-full shadow-lift px-6 py-3 flex items-center gap-2"><span class="text-[12px]">▶</span>運動開始</button>`;
+  // 運動開始は常に出す=休養日でもタイマーは使える(休養は宣言であって禁止ではない・気が変われば動ける)。
+  el.innerHTML = `<button class="start-workout pop bg-accent text-white text-[13px] font-extrabold rounded-full shadow-lift px-6 py-3 flex items-center gap-2"><span class="text-[12px]">▶</span>運動開始</button>`;
 }
-function startTimer(tags){
-  timerTags=(tags||[]).slice(); timerSec=0; timerRunning=true;
+function startTimer(tags, startedAtISO){
+  timerTags=(tags||[]).slice();
+  timerStartedAt = startedAtISO || new Date().toISOString();   // started_at(永続値)と一致させる
+  timerRunning=true;
   if(timerInterval) clearInterval(timerInterval);
-  timerInterval=setInterval(()=>{ timerSec++; const d=document.getElementById('timerDisp'); if(d) d.textContent=fmtTimer(timerSec); },1000);
+  timerInterval=setInterval(updateTimerDisp, 1000);   // 表示更新のみ・経過は毎回 started_at から算出
   renderStartBar();
 }
 function onStartWorkout(){
@@ -124,8 +124,8 @@ function onStartWorkout(){
   if(tags.length){
     timerFromPlan=true; activeEntryIds=todays.map(e=>e.id);
     const now=new Date().toISOString();
-    todays.forEach(e=>{ e.startedAt=now; upsertEntry(e); });   // 開始を永続化(仲間に🏃/①通知)
-    startTimer(tags); renderDayList();
+    todays.forEach(e=>{ e.startedAt=now; upsertEntry(e); });   // 開始を永続化(仲間に🏃/①通知・復元の起点)
+    startTimer(tags, now); renderDayList();
   }
   else { timerFromPlan=false; startTags=[]; tagAdding.start=false; renderStartTags(); closeAllSheets('startSheet'); document.getElementById('startScrim').classList.remove('hidden'); document.getElementById('startSheet').classList.add('open'); }
 }
@@ -194,18 +194,28 @@ function renderStartTags(){
 function onStartGo(){
   if(!startTags.length) return;
   timerFromPlan=false; closeStartSheet();
-  // 予定なし開始でも開始時にエントリを作成(仲間に🏃/①通知)。従来は終了時作成だった。
-  const en={id:newId(), date:TODAY, type:'workout', who:CURRENT_USER, tags:startTags.slice(), time:'いま', status:'planned', startedAt:new Date().toISOString()};
-  logEntries.push(en); activeEntryIds=[en.id]; upsertEntry(en);
-  startTimer(startTags); renderDayList();
+  const now=new Date().toISOString();
+  // 休養日に運動開始=休養宣言を運動に切り替える(1日1予定を維持・「休養日なのに実施済み」の矛盾を避ける)。
+  const rest=logEntries.find(e=>e.type==='rest'&&e.who===CURRENT_USER&&e.date===TODAY);
+  let en;
+  if(rest){
+    rest.type='workout'; rest.tags=startTags.slice(); rest.time='いま'; rest.status='planned'; rest.startedAt=now;
+    en=rest; timerFromPlan=true;   // 既存エントリを上書き=新規追加しない
+  }else{
+    en={id:newId(), date:TODAY, type:'workout', who:CURRENT_USER, tags:startTags.slice(), time:'いま', status:'planned', startedAt:now};
+    logEntries.push(en);
+  }
+  activeEntryIds=[en.id]; upsertEntry(en);
+  startTimer(startTags, now); renderDayList();
 }
 function onStopWorkout(){
   if(timerInterval) clearInterval(timerInterval);
   timerRunning=false;
   const ids=activeEntryIds.slice();   // 開始時に作った/印を付けた自分のエントリ(plan/no-plan共通)
   activeEntryIds=[];                   // 実施中→実施済みへ遷移
-  const durSec=timerSec;
-  const dur=durFromSec(timerSec);
+  const durSec=elapsedSec();           // 経過は started_at(壁時計)から算出=バックグラウンドでも正確
+  const dur=durFromSec(durSec);
+  timerStartedAt=null;
   renderStartBar();
   // 開始時に永続化済みのエントリを done に更新(二重作成しない)。保険: idが無ければ新規done。
   if(ids.length){
@@ -217,6 +227,17 @@ function onStopWorkout(){
   rerenderAfterChange();
   // open the share (post) flow with the same tags + measured time
   openPostSheet(timerTags, dur, durSec);
+}
+// タブを閉じて開き直し/再読込しても、DBに未終了の started_at(今日・done前)があれば「トレーニング中」を復元。
+// 経過は started_at 基準なので、閉じている間の時間も正しくカウントされている。
+function restoreActiveTimer(){
+  if(timerRunning) return;
+  const act = logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&e.startedAt&&e.status!=='done'&&isTodayIso(e.startedAt));
+  if(!act.length) return;
+  const startedAt = act.map(e=>e.startedAt).sort()[0];   // 最も早い開始時刻を基準に
+  timerFromPlan=true; activeEntryIds=act.map(e=>e.id);
+  startTimer([...new Set(act.flatMap(e=>e.tags||[]))], startedAt);   // renderStartBar で「◯分経過」を表示
+  renderDayList();   // 予定リストの当該エントリも「🏃 トレーニング中」に
 }
 function renderPostTags(){
   const el=document.getElementById('psTags'); if(!el) return;
@@ -1332,6 +1353,8 @@ document.addEventListener('click',e=>{
 // live maintenance preview while editing the profile sheet
 document.addEventListener('input', e=>{ if(e.target.closest('#profileSheet')) updateProfilePreview(); });
 document.addEventListener('change', e=>{ if(e.target.id==='psCamera'||e.target.id==='psAlbum') handlePhoto(e.target.files && e.target.files[0]); });
+// タブ復帰時にタイマー表示を即補正(バックグラウンド中のsetInterval間引きを吸収・経過はstarted_at基準)
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && timerRunning) updateTimerDisp(); });
 // 「＋その他」インライン入力: Enter=追加 / Esc=閉じる
 document.addEventListener('keydown', e=>{
   const inp=e.target; if(!inp.classList || !inp.classList.contains('tag-input')) return;
@@ -1375,6 +1398,7 @@ async function initApp(session){
   renderFeedAvatars(); renderFeed(); renderWeek(); renderDayList(); renderGroup();
   renderMeal(); renderLimits(); renderMonth(); renderMaintCaption(); renderStartBar(); renderStats();
   renderIdentity();
+  restoreActiveTimer();   // 未終了の運動があれば「トレーニング中(◯分経過)」を復元(started_at基準)
   showPage('schedule');   // app opens on 予定 (also reveals the 運動開始 bar)
   // 初回のみ自動表示。既にデータがある既存ユーザーには突然出さない(手動再表示は設定/🔔から)
   const hasData = logEntries.length>0 || posts.length>0 || limits.length>0;

@@ -310,8 +310,12 @@ create view public.public_profiles
 revoke all on public.public_profiles from anon;
 grant select on public.public_profiles to authenticated;
 
--- 6-4) invitations: グループ招待コード(hex12・既定24h・人数無制限)。参加は join_space_with_code のみ。
-create table if not exists public.invitations (
+-- 6-4) invites: グループ招待コード(hex12・既定24h・人数無制限)。テーブル名は invites で統一。
+--   ※過去に invites/invitations が混在した経緯あり。旧 invitations は掃除して invites に一本化。
+--   発行は generate_invite(唯一の発行口・SECURITY DEFINER)/参加は join_space_with_code のみ。
+drop function if exists public.generate_invite(uuid);   -- 戻り型を json に変えるため先に drop(冪等)
+drop table if exists public.invitations cascade;         -- 旧テーブルを掃除(invites に一本化)
+create table if not exists public.invites (
   id         uuid primary key default gen_random_uuid(),
   space_id   uuid not null references public.spaces(id) on delete cascade,
   created_by uuid not null references public.users(id)  on delete cascade,
@@ -319,21 +323,42 @@ create table if not exists public.invitations (
   expires_at timestamptz not null default (now() + interval '24 hours'),
   created_at timestamptz not null default now()
 );
-create index if not exists invitations_code_idx on public.invitations (code);
-alter table public.invitations enable row level security;
-drop policy if exists inv_select_member on public.invitations;
-create policy inv_select_member on public.invitations for select using (is_space_member(space_id));
-drop policy if exists inv_insert_member on public.invitations;
-create policy inv_insert_member on public.invitations for insert with check (created_by = auth.uid() and is_space_member(space_id));
-drop policy if exists inv_delete_member on public.invitations;
-create policy inv_delete_member on public.invitations for delete using (is_space_member(space_id));
-grant select, insert, delete on public.invitations to authenticated;
+create index if not exists invites_code_idx on public.invites (code);
+alter table public.invites enable row level security;
+drop policy if exists inv_select_member on public.invites;
+create policy inv_select_member on public.invites for select using (is_space_member(space_id));
+drop policy if exists inv_delete_member on public.invites;
+create policy inv_delete_member on public.invites for delete using (is_space_member(space_id));
+grant select, delete on public.invites to authenticated;   -- 発行は generate_invite(definer)一本化=直接insertは付与しない
 
--- space_members の自己追加は「自分が作成したグループのみ」に厳格化(他は招待経由のみ)
+-- 招待発行: 同space_idの既存を削除→新規1件(常に最新1コードのみ有効)。戻りは json(code,expires_at)=表示が予測可能。
+create or replace function public.generate_invite(p_space_id uuid)
+returns json language plpgsql security definer set search_path = public as $$
+declare v_code text; v_exp timestamptz;
+begin
+  if not public.is_space_member(p_space_id) then raise exception 'not a member of this space'; end if;
+  delete from public.invites where space_id = p_space_id;
+  insert into public.invites (space_id, created_by) values (p_space_id, auth.uid())
+    returning code, expires_at into v_code, v_exp;
+  return json_build_object('code', v_code, 'expires_at', v_exp);
+end $$;
+grant execute on function public.generate_invite(uuid) to authenticated;
+revoke execute on function public.generate_invite(uuid) from public;
+
+-- is_space_creator: 自分が作成した space か(spacesのRLSを迂回して created_by 確認)。
+--   members_insert_self が spaces を直参照すると spaces のRLS(is_space_member)で弾かれ、
+--   owner自身の初回メンバー行が作れない(まだメンバーでない)。DEFINER経由で解消。
+create or replace function public.is_space_creator(p_space_id uuid)
+returns boolean language sql security definer set search_path = public stable as $$
+  select exists (select 1 from public.spaces where id = p_space_id and created_by = auth.uid());
+$$;
+grant execute on function public.is_space_creator(uuid) to authenticated;
+revoke execute on function public.is_space_creator(uuid) from public;
+
+-- space_members の自己追加は「自分が作成したグループのみ」(他は招待経由のみ)。is_space_creator でRLS穴を回避。
 drop policy if exists members_insert_self on public.space_members;
 create policy members_insert_self on public.space_members for insert with check (
-  user_id = auth.uid()
-  and exists (select 1 from public.spaces s where s.id = space_id and s.created_by = auth.uid())
+  user_id = auth.uid() and public.is_space_creator(space_id)
 );
 
 -- 参加の唯一の入口(コード検証→自分をメンバー追加)。anon実行不可。
@@ -341,7 +366,7 @@ create or replace function public.join_space_with_code(p_code text)
 returns uuid language plpgsql security definer set search_path = public as $$
 declare v_space uuid;
 begin
-  select space_id into v_space from public.invitations where code = p_code and expires_at > now();
+  select space_id into v_space from public.invites where code = p_code and expires_at > now();
   if v_space is null then raise exception 'invalid or expired code'; end if;
   insert into public.space_members (space_id, user_id, role)
     values (v_space, auth.uid(), 'member') on conflict (space_id, user_id) do nothing;
@@ -350,6 +375,9 @@ end; $$;
 grant execute on function public.join_space_with_code(text) to authenticated;
 revoke execute on function public.join_space_with_code(text) from public;
 
+-- スキーマキャッシュ更新(関数追加直後のPGRST202回避)
+notify pgrst, 'reload schema';
+
 -- =============================================================
--- 完了(v2: つながり型)。
+-- 完了(v2: つながり型 / invites一本化・generate_invite json・is_space_creator)。
 -- =============================================================
