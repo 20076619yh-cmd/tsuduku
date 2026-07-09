@@ -115,9 +115,10 @@
 
       <div class="flex items-center justify-between mb-2.5 ml-0.5">
         <p id="dayListLabel" class="text-[12px] font-bold text-sub">きょうの予定</p>
-        <button class="day-add pop text-[11px] font-bold text-accent">＋ 追記</button>
+        <button id="dayAddBtn" class="day-add pop text-[11px] font-bold text-accent">＋ 追記</button>
       </div>
-      <div id="planList" class="space-y-2.5"></div>
+      <!-- きょうの予定: メンバー増加に備え一定高さでスクロール(縦) -->
+      <div id="planList" class="space-y-3 max-h-[46vh] overflow-y-auto phone-scroll"></div>
 
       <!-- compact body-weight handle (edit/add); weight is displayed on 記録 -->
       <div id="dayWeightRow" class="mt-3"></div>
@@ -134,11 +135,10 @@
       <!-- self rules (limits): 日数ストリーク型。per-item privacy + 各ルールに🔥N日目(自己ベスト併記) -->
       <div class="rounded-2xl bg-card border border-line shadow-card p-4 mt-5">
         <div class="flex items-center justify-between mb-3">
-          <p class="text-[13px] font-extrabold text-ink">自分ルール</p>
+          <p class="text-[13px] font-extrabold text-ink">自分ルール（最大3つまで）</p>
           <button id="ruleAddBtn" class="rule-add pop text-[11px] font-bold text-accent">＋ ルール追加</button>
         </div>
-        <div id="limitList" class="space-y-2"></div>
-        <p class="text-[10px] text-faint mt-2">🔥＝続いた日数。破らない限り毎日そっと積み上がる。✕でまた植え直すか、終えるかを選べる ・ 🌐/🔒 で公開範囲 ・ 最大3つ</p>
+        <div id="limitList" class="space-y-3"></div>
       </div>
 
       <div class="h-16"></div><!-- spacer so the fixed 運動開始 bar never covers the last card -->
@@ -225,7 +225,8 @@
       <!-- group, minimal -->
       <div class="rounded-2xl bg-card border border-line shadow-card p-4">
         <p class="text-[12px] font-bold text-sub mb-3">仲間のうごき（今週）</p>
-        <div id="groupRow" class="space-y-3"></div>
+        <!-- 仲間のうごき: メンバー増加に備え一定高さでスクロール(縦) -->
+        <div id="groupRow" class="space-y-3 max-h-[40vh] overflow-y-auto phone-scroll"></div>
       </div>
     </section>
 
@@ -428,15 +429,7 @@
     <div class="bg-ink text-white text-[12px] font-bold px-4 py-2.5 rounded-full shadow-lift text-center"></div>
   </div>
 
-  <!-- custom tag (＋その他) 入力シート: 運動開始/予定/投稿で共通。prompt()の置換 -->
-  <div id="tagOtherScrim" class="sheet-scrim absolute inset-0 z-[55] hidden"></div>
-  <div id="tagOtherSheet" class="sheet absolute inset-x-0 bottom-0 z-[60] bg-card rounded-t-[24px] border-t border-line px-5 pt-3 pb-7">
-    <div class="w-10 h-1 rounded-full bg-line mx-auto mb-4"></div>
-    <label class="block text-[11px] font-bold text-faint mb-1.5">部位・メニュー名</label>
-    <input id="tagOtherInput" type="text" placeholder="例: 前腕 / ランニング" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-1">
-    <button id="tagOtherConfirm" class="pop w-full mt-3 bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">追加</button>
-    <button id="tagOtherCancel" class="pop w-full mt-2 text-[12px] font-bold text-faint py-2">キャンセル</button>
-  </div>
+  <!-- 「＋その他」はインライン入力(tagAdderHtml)に置換=専用シートは廃止 -->
 
   <!-- add self-rule sheet (mock) -->
   <div id="ruleScrim" class="sheet-scrim absolute inset-0 z-40 hidden"></div>

@@ -79,7 +79,13 @@ export function profileFromRow(row){
     activity: row.activity_coef ?? 1.45,
     maintenanceOverride: row.maintenance_override ?? null,
     tourDone: !!row.tour_done,   // 初回オンボーディング完了フラグ
+    settings: row.settings || {},   // ユーザー設定バッグ(jsonb)。customTags等・将来のウィジェットON/OFFもここ
   };
+}
+// ユーザー設定(jsonb)を丸ごと保存。呼び出し側で既存settingsにマージしてから渡す(他キーを消さない)。
+export async function saveSettings(userId, settings){
+  const { error } = await supabase.from('users').update({ settings }).eq('id', userId);
+  if(error) fail('saveSettings', error);
 }
 // ツアー完了を保存。列(tour_done)未追加でも致命ではないので console.error のみ(トーストは出さない)。
 export async function markTourDone(userId){
@@ -184,12 +190,39 @@ export async function loadAll(){
   };
 }
 
+// つながり相手の運動だけ(指定期間)。安全な列のみ・RLSが type=workout & is_connected を担保。
+// 体重/食事は列にもRLSにも乗らない=生体重は絶対に返らない。
+export async function loadConnectedWorkouts(fromDate, toDate){
+  const { data, error } = await supabase.from('entries')
+    .select('id, owner, type, entry_date, tags, time_label, dur_sec, status, started_at')
+    .in('type', ['workout','rest']).neq('owner', _uid)    // 運動＋休養(宣言)を共有。体重/食事は列にもRLSにも乗らない
+    .gte('entry_date', fromDate).lte('entry_date', toDate);
+  if(error){ console.error('loadConnectedWorkouts failed:', error.message || error); return []; }
+  return (data || []).map(mapEntry);
+}
+
+// リアクション永続化(post_reactions)。見える投稿ぶんだけRLSが返す。集計はアプリ側。
+export async function loadReactions(){
+  const { data, error } = await supabase.from('post_reactions').select('post_id, user_id, kind');
+  if(error){ console.error('loadReactions failed:', error.message || error); return []; }
+  return data || [];
+}
+export async function addReaction(postId, kind){
+  const { error } = await supabase.from('post_reactions').insert({ post_id: postId, user_id: _uid, kind });
+  if(error) fail('addReaction', error);
+}
+export async function removeReaction(postId, kind){
+  const { error } = await supabase.from('post_reactions').delete()
+    .eq('post_id', postId).eq('user_id', _uid).eq('kind', kind);
+  if(error) fail('removeReaction', error);
+}
+
 // DB (snake_case) → in-memory shapes used across main.js.
 // dur_sec is the source of truth; keep both durSec (persist) and dur (display label).
 function mapEntry(x){
   return { id:x.id, who:x.owner, type:x.type, date:x.entry_date,
     tags:x.tags || [], time:x.time_label, durSec:x.dur_sec, dur:durLabel(x.dur_sec),
-    status:x.status, kg:x.kg, kcal:x.kcal };
+    status:x.status, kg:x.kg, kcal:x.kcal, startedAt:x.started_at };
 }
 function mapPost(x){
   return { id:x.id, who:x.owner, kind:x.kind, tags:x.tags || [], durSec:x.dur_sec, dur:durLabel(x.dur_sec),
@@ -212,6 +245,7 @@ function entryToRow(e){
     tags: e.tags || [], time_label: e.time ?? null,
     dur_sec: e.durSec ?? null, status: e.status ?? null,
     kg: e.kg ?? null, kcal: e.kcal ?? null,
+    started_at: e.startedAt ?? null,   // タイマー開始時刻(仲間の🏃トレ中判定・①通知の起点)
   };
 }
 // upsert = insert-or-overwrite by PK id → editing a row never double-inserts.

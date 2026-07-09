@@ -2,7 +2,7 @@
 import './style.css';
 import Chart from 'chart.js/auto';   // auto = same all-controllers registration as the old UMD CDN
 import { supabase } from './supabase.js';
-import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler, markTourDone, loadPublicProfiles, loadPublicRules, createInvite, joinWithCode, loadGroupAdmin, removeGroupMember, leaveGroups } from './db.js';
+import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler, markTourDone, loadPublicProfiles, loadPublicRules, createInvite, joinWithCode, loadGroupAdmin, removeGroupMember, leaveGroups, loadConnectedWorkouts, loadReactions, addReaction, removeReaction, saveSettings } from './db.js';
 
 /* ---------- members ---------- */
 // Flat initial state: just me. Friends arrive in the backend/sharing phase (I/I2).
@@ -13,6 +13,13 @@ let members = {
 // グループ管理: 自分がownerのグループの外せるメンバー[{spaceId,userId}] / 自分が参加(非owner)中で抜けられるグループ
 let removableMembers = [];
 let joinedSpaceIds = [];
+// B-2: つながり相手の今週の運動(仲間の今日の宣言用) / 見えるpost_reactions(post_id,user_id,kind)
+let connectedWork = [];
+let reactionRows = [];
+// ユーザーが「＋その他」で追加したカスタム部位。users.custom_tags に永続化・全ピッカーの選択肢に出す。
+let userParts = [];
+// 部位チップ列(HTML): 部位が空なら既定の「運動」チップを出す(部位なしでも空表示にしない)。
+function partsOrDefault(tags){ return (tags&&tags.length) ? tags.map(t=>chip(t)).join('') : chip('運動'); }
 // First code point (not str[0]) so emoji / surrogate-pair nicknames don't get half-cut.
 function firstCP(s){ return (Array.from((s || '').trim())[0]) || '?'; }
 // 保存失敗の軽いトースト(自動で消える・ノーシェイム)。db.jsの保存系失敗時に共通発火。
@@ -33,11 +40,18 @@ function heroDisplayName(nick){
   return nick;
 }
 // 部位色: 肩腕を「肩(amber)」「腕(bronze)」に分割。近い暖色だが区別可。既存パレットと調和。
-// 未登録タグ(＋その他の自由テキスト)は tagDot[t]||'#9AA09A' でニュートラル灰に自動フォールバック。
 const tagDot = {
   '胸トレ':'#FF6A3D','背中':'#3E86C9','脚':'#7C6CD0',
   '肩':'#E0A53A','腕':'#B5836A','有酸素':'#14B87C','ストレッチ':'#5FB6A8','休養':'#9AA09A'
 };
+// カスタム部位(＋その他)の色: 既存と調和する固定パレットを、名前のハッシュで安定割当(同名=常に同色)。
+const CUSTOM_PALETTE=['#E07A5F','#5B8C9E','#9B7EDE','#D4A15A','#3FA787','#C98BB9','#6FB4A6','#B07A4E'];
+function hashStr(s){ let h=0; for(let i=0;i<s.length;i++){ h=(h*31+s.charCodeAt(i))|0; } return Math.abs(h); }
+function partColor(tag){
+  if(tagDot[tag]) return tagDot[tag];
+  if(tag==='運動') return '#9AA09A';   // 部位なしの既定ラベルはニュートラル灰
+  return CUSTOM_PALETTE[hashStr(tag)%CUSTOM_PALETTE.length];
+}
 function avatar(m,size=40,who=''){
   const du = who ? ` data-user="${who}"` : '';   // タップ相手を特定するため
   const base=`avatar-btn cursor-pointer rounded-full shrink-0 flex items-center justify-center text-white font-bold`;
@@ -47,7 +61,7 @@ function avatar(m,size=40,who=''){
   return `<div${du} style="width:${size}px;height:${size}px;background:${m.c}" class="${base}">${letter}</div>`;
 }
 function chip(tag,status){
-  const dot=tagDot[tag]||'#9AA09A';
+  const dot=partColor(tag);
   const d=`<span class="w-1.5 h-1.5 rounded-full" style="background:${dot}"></span>`;
   const base='inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full';
   if(status==='done')    return `<span class="${base} text-ink bg-asoft border border-aline">${d}${tag}<span class="text-accent text-[12px] leading-none">✓</span></span>`;
@@ -82,12 +96,20 @@ function fmtTimer(s){ return `${String(Math.floor(s/60)).padStart(2,'0')}:${Stri
 function durFromSec(s){ const min=Math.max(1,Math.round(s/60)); if(min<60) return `${min}分`; const h=Math.floor(min/60), mm=min%60; return mm?`${h}時間${mm}分`:`${h}時間`; }
 function renderStartBar(){
   const el=document.getElementById('startBarInner'); if(!el) return;
-  el.innerHTML = timerRunning
-    ? `<div class="bg-card border border-aline rounded-full shadow-lift pl-5 pr-2 py-2 flex items-center gap-3">
+  if(timerRunning){
+    el.innerHTML=`<div class="bg-card border border-aline rounded-full shadow-lift pl-5 pr-2 py-2 flex items-center gap-3">
          <span class="flex items-center gap-2 text-[14px] font-extrabold text-ink"><span class="w-2 h-2 rounded-full bg-accent animate-pulse"></span><span id="timerDisp">${fmtTimer(timerSec)}</span></span>
          <span class="text-[11px] font-bold text-sub truncate max-w-[110px]">${timerTags.join('・')}</span>
          <button class="stop-workout pop bg-accent text-white text-[12px] font-extrabold rounded-full px-4 py-2">運動終了</button>
-       </div>`
+       </div>`;
+    return;
+  }
+  // 休養日(今日がrestで運動予定なし)はタイマーを出さず、静かに「休養日」表示(ノーシェイム=計画的回復)。
+  // 気が変わって運動したくなったら予定に部位を足せばタイマーが戻る。
+  const todayWorkout=logEntries.some(e=>e.type==='workout'&&e.who===CURRENT_USER&&e.date===TODAY);
+  const todayRest=logEntries.some(e=>e.type==='rest'&&e.who===CURRENT_USER&&e.date===TODAY);
+  el.innerHTML = (todayRest && !todayWorkout)
+    ? `<div class="bg-card border border-line rounded-full shadow-lift px-6 py-3 flex items-center gap-2 text-[13px] font-extrabold" style="color:${REST_COLOR}"><span>🌙</span>今日は休養日</div>`
     : `<button class="start-workout pop bg-accent text-white text-[13px] font-extrabold rounded-full shadow-lift px-6 py-3 flex items-center gap-2"><span class="text-[12px]">▶</span>運動開始</button>`;
 }
 function startTimer(tags){
@@ -99,50 +121,111 @@ function startTimer(tags){
 function onStartWorkout(){
   const todays=logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&e.date===TODAY);
   const tags=[...new Set(todays.flatMap(e=>e.tags||[]))];
-  if(tags.length){ timerFromPlan=true; activeEntryIds=todays.map(e=>e.id); startTimer(tags); renderDayList(); }
-  else { timerFromPlan=false; startTags=[]; renderStartTags(); document.getElementById('startScrim').classList.remove('hidden'); document.getElementById('startSheet').classList.add('open'); }
+  if(tags.length){
+    timerFromPlan=true; activeEntryIds=todays.map(e=>e.id);
+    const now=new Date().toISOString();
+    todays.forEach(e=>{ e.startedAt=now; upsertEntry(e); });   // 開始を永続化(仲間に🏃/①通知)
+    startTimer(tags); renderDayList();
+  }
+  else { timerFromPlan=false; startTags=[]; tagAdding.start=false; renderStartTags(); closeAllSheets('startSheet'); document.getElementById('startScrim').classList.remove('hidden'); document.getElementById('startSheet').classList.add('open'); }
 }
 function closeStartSheet(){ document.getElementById('startSheet').classList.remove('open'); document.getElementById('startScrim').classList.add('hidden'); }
-function renderStartTags(){
-  // fixed cats + any user-added free-text tags (＋その他), then the add button
-  const list=[...START_CATS, ...startTags.filter(t=>!START_CATS.includes(t))];
-  document.getElementById('startTags').innerHTML=list.map(t=>
-    `<button class="start-tag pop text-[12px] font-bold px-3 py-2 rounded-full border ${startTags.includes(t)?'sel':'border-line text-ink bg-card'}" data-tag="${t}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style="background:${tagDot[t]||'#9AA09A'}"></span>${t}</button>`
-  ).join('')
-    + `<button class="start-tag-other pop text-[12px] font-bold px-3 py-2 rounded-full border border-dashed border-line text-sub bg-card">＋その他</button>`;
+// 「＋その他」= シートを開かずインライン入力。チップ列の直下に 入力＋追加＋× をその場展開。
+// ctx=sheet(予定)/start(運動開始)/post(投稿)。シートを一切開かないので重なりが構造的に起きない。
+let tagAdding={ sheet:false, start:false, post:false };
+function tagArr(ctx){ return ctx==='start'?startTags : ctx==='post'?postTags : sfTags; }
+function tagRender(ctx){ if(ctx==='start') renderStartTags(); else if(ctx==='post') renderPostTags(); else renderSheetTags(); }
+function openTagInput(ctx){ tagAdding[ctx]=true; tagRender(ctx); const inp=document.querySelector('.tag-input[data-ctx="'+ctx+'"]'); if(inp) setTimeout(()=>inp.focus(),30); }
+function closeTagInput(ctx){ tagAdding[ctx]=false; tagRender(ctx); }   // ×/Esc=入力欄だけ閉じる
+function addTagFromInput(ctx){
+  const inp=document.querySelector('.tag-input[data-ctx="'+ctx+'"]');
+  const v=(inp && inp.value || '').trim();
+  const arr=tagArr(ctx);
+  if(v){
+    if(!arr.includes(v)) arr.push(v);                                   // このピッカーで選択状態に
+    if(!SHEET_TAGS.includes(v) && !userParts.includes(v)){ userParts.push(v); persistUserParts(); }  // ユーザー部位リストに保持(次回以降も出る)
+    if(ctx==='sheet') sfRest=false;                                     // 部位追加=休養を外す(排他)
+  }
+  tagAdding[ctx]=false; tagRender(ctx);
 }
-function onStartGo(){ if(!startTags.length) return; timerFromPlan=false; closeStartSheet(); startTimer(startTags); }
+// カスタム部位の削除(チップの×)。ユーザーリスト＋全ピッカーの選択から外し永続化。既存部位は削除不可。
+function deleteCustomPart(tag, ctx){
+  const i=userParts.indexOf(tag); if(i>=0) userParts.splice(i,1);
+  [sfTags,startTags,postTags].forEach(a=>{ const j=a.indexOf(tag); if(j>=0) a.splice(j,1); });
+  persistUserParts(); tagRender(ctx);
+}
+function persistUserParts(){
+  if(!members[CURRENT_USER]) return;
+  profile.settings = { ...(profile.settings||{}), customTags: userParts.slice() };   // 他キーを消さずマージ
+  saveSettings(CURRENT_USER, profile.settings);
+}
+// 部位ピッカーのチップ列: 固定部位＋userParts＋(読み込んだ選択のみ)。カスタムは色付き＋×(即削除)。
+const SHEET_SET=new Set(['胸トレ','背中','脚','肩','腕','有酸素','ストレッチ']);
+const START_SET=new Set(['胸トレ','背中','脚','肩','腕','有酸素','ストレッチ']);
+// 選択スタイル(全チップ共通): 選択中=部位色の薄い塗り＋色の内枠＋色文字 / 未選択=白＋色ドット(現状踏襲)。
+function selCls(on){ return on ? 'border-transparent' : 'border-line bg-card'; }
+function selStyle(color, on){ return on ? `background:${color}22;box-shadow:inset 0 0 0 1.5px ${color};color:${color}` : ''; }
+function partChips(fixed, fixedSet, sel, ctx){
+  const list=[...fixed];
+  userParts.forEach(t=>{ if(!list.includes(t)) list.push(t); });
+  sel.forEach(t=>{ if(!list.includes(t)) list.push(t); });   // 既存エントリのカスタム部位も表示に残す
+  return list.map(t=>{
+    const on=sel.includes(t), custom=!fixedSet.has(t), col=partColor(t);
+    // カスタムは×で即削除(確認なし=誤って消してもまた作れる)。要素は inline-flex items-center で垂直中央。
+    const del=custom?`<span class="part-del leading-none text-faint" data-tag="${t}" data-ctx="${ctx}" style="font-size:14px">×</span>`:'';
+    return `<button class="pk-tag pop inline-flex items-center gap-1.5 text-[12px] font-bold px-3 py-1.5 rounded-full border ${selCls(on)} text-ink" data-tag="${t}" data-ctx="${ctx}" style="${selStyle(col,on)}"><span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:${col}"></span>${t}${del}</button>`;
+  }).join('');
+}
+// チップ列末尾: 通常は「＋その他」/ 追加中はインライン入力行(入力＋追加＋×)。新しいシートは開かない。
+function tagAdderHtml(ctx){
+  if(tagAdding[ctx]){
+    return `<span class="inline-flex items-center gap-1 align-middle">`
+      + `<input class="tag-input bg-bg border border-aline rounded-full px-3 py-1.5 text-[12px] font-bold text-ink w-28" type="text" placeholder="部位・メニュー" data-ctx="${ctx}">`
+      + `<button class="tag-add pop text-[12px] font-extrabold text-accent px-1.5" data-ctx="${ctx}">追加</button>`
+      + `<button class="tag-close pop text-[15px] leading-none text-faint px-1" data-ctx="${ctx}" aria-label="閉じる">×</button>`
+      + `</span>`;
+  }
+  return `<button class="tag-other pop text-[11px] font-bold px-3 py-1.5 rounded-full border border-dashed border-line text-sub bg-card" data-ctx="${ctx}">＋その他</button>`;
+}
+function renderStartTags(){
+  // 固定部位＋userParts(色付き・×削除可)、末尾に「＋その他」
+  document.getElementById('startTags').innerHTML = partChips(START_CATS, START_SET, startTags, 'start') + tagAdderHtml('start');
+}
+function onStartGo(){
+  if(!startTags.length) return;
+  timerFromPlan=false; closeStartSheet();
+  // 予定なし開始でも開始時にエントリを作成(仲間に🏃/①通知)。従来は終了時作成だった。
+  const en={id:newId(), date:TODAY, type:'workout', who:CURRENT_USER, tags:startTags.slice(), time:'いま', status:'planned', startedAt:new Date().toISOString()};
+  logEntries.push(en); activeEntryIds=[en.id]; upsertEntry(en);
+  startTimer(startTags); renderDayList();
+}
 function onStopWorkout(){
   if(timerInterval) clearInterval(timerInterval);
   timerRunning=false;
-  activeEntryIds=[];   // 実施中→実施済みへ遷移
+  const ids=activeEntryIds.slice();   // 開始時に作った/印を付けた自分のエントリ(plan/no-plan共通)
+  activeEntryIds=[];                   // 実施中→実施済みへ遷移
   const durSec=timerSec;
   const dur=durFromSec(timerSec);
   renderStartBar();
-  // (1) record the workout so it counts. 予定から開始なら今日の自分の予定を実施済みに更新（重複追加しない）。
-  //     予定なし開始の時だけ新規エントリを追加する。dur_sec を保存し表示は durFromSec 整形。
-  const todays=logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&e.date===TODAY);
-  if(timerFromPlan && todays.length){
-    todays.forEach(e=>{ e.status='done'; e.dur=dur; e.durSec=durSec; upsertEntry(e); });
+  // 開始時に永続化済みのエントリを done に更新(二重作成しない)。保険: idが無ければ新規done。
+  if(ids.length){
+    ids.forEach(id=>{ const e=logEntries.find(x=>x.id===id); if(e){ e.status='done'; e.dur=dur; e.durSec=durSec; upsertEntry(e); } });
   }else{
     const en={id:newId(), date:TODAY, type:'workout', who:CURRENT_USER, tags:timerTags.slice(), time:'いま', dur, durSec, status:'done'};
     logEntries.push(en); upsertEntry(en);
   }
   rerenderAfterChange();
-  // (2) open the share (post) flow with the same tags + measured time
+  // open the share (post) flow with the same tags + measured time
   openPostSheet(timerTags, dur, durSec);
 }
 function renderPostTags(){
   const el=document.getElementById('psTags'); if(!el) return;
-  // 予定/タイマーの部位を初期選択。ジムで変わることがあるので選び直せる(＋その他も可)
-  const list=[...SHEET_TAGS, ...postTags.filter(t=>!SHEET_TAGS.includes(t))];
-  el.innerHTML=list.map(t=>
-    `<button class="ps-tag pop text-[11px] font-bold px-3 py-1.5 rounded-full border ${postTags.includes(t)?'sel':'border-line text-ink bg-card'}" data-tag="${t}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style="background:${tagDot[t]||'#9AA09A'}"></span>${t}</button>`
-  ).join('')
-    + `<button class="ps-tag-other pop text-[11px] font-bold px-3 py-1.5 rounded-full border border-dashed border-line text-sub bg-card">＋その他</button>`;
+  // 予定/タイマーの部位を初期選択。ジムで変わることがあるので選び直せる。固定＋userParts＋末尾に「＋その他」
+  el.innerHTML = partChips(SHEET_TAGS, SHEET_SET, postTags, 'post') + tagAdderHtml('post');
 }
 function openPostSheet(tags, dur, durSec){
-  pendingPhoto=null; postCtx={dur, durSec};
+  closeAllSheets('postSheet');   // 投稿シートを開く前に他シートを全て閉じる
+  pendingPhoto=null; postCtx={dur, durSec}; tagAdding.post=false;
   postTags=(tags||[]).slice(); renderPostTags();
   document.getElementById('psDur').textContent='実施 '+dur;
   document.getElementById('psPhotoPreview').innerHTML='';
@@ -207,22 +290,26 @@ function renderFeed(){
           <p class="text-[14px] font-extrabold text-ink leading-none">${m.name}</p>
           <p class="text-[11px] text-faint mt-1">${relTime(p.createdAt)}</p>
         </div>
-        <div class="flex flex-wrap justify-end gap-1.5">${(p.tags||[]).map(t=>chip(t)).join('')}</div>
+        <div class="flex flex-wrap justify-end gap-1.5">${partsOrDefault(p.tags)}</div>
       </div>
       ${imgBlock}
       ${body}
       ${ruleSection(p)}
       <div class="flex gap-2 px-4 py-3 border-t border-line">
-        ${reactBtn(i,'fire','🔥',p.r.fire)}
-        ${reactBtn(i,'muscle','💪',p.r.muscle)}
-        ${reactBtn(i,'clap','👏',p.r.clap)}
+        ${reactBtn(p.id,'fire','🔥')}
+        ${reactBtn(p.id,'muscle','💪')}
+        ${reactBtn(p.id,'clap','👏')}
       </div>
       <!-- コメント欄(4d)予定地。将来ここに border-t border-line のセクションを追加する -->
     </article>`;
   }).join('');
 }
-function reactBtn(i,key,emo,n){
-  return `<button class="react pop flex items-center gap-1.5 border border-line bg-card px-3 py-1.5 rounded-full text-[13px] font-bold text-sub" data-i="${i}" data-k="${key}"><span>${emo}</span><span class="cnt">${n}</span></button>`;
+// リアクションは post_reactions が真実(永続・共有)。カウント/自分が付けたかを都度集計。
+function reactCount(pid,kind){ return reactionRows.filter(r=>r.post_id===pid&&r.kind===kind).length; }
+function reactMine(pid,kind){ return reactionRows.some(r=>r.post_id===pid&&r.kind===kind&&r.user_id===CURRENT_USER); }
+function reactBtn(pid,kind,emo){
+  const n=reactCount(pid,kind), mine=reactMine(pid,kind);
+  return `<button class="react pop flex items-center gap-1.5 border px-3 py-1.5 rounded-full text-[13px] font-bold ${mine?'border-aline bg-asoft text-accent':'border-line bg-card text-sub'}" data-post="${pid}" data-k="${kind}"><span>${emo}</span><span class="cnt">${n}</span></button>`;
 }
 // 投稿カード下部に「投稿時点の公開ルール」を最大3つ併記。焼き込み済みスナップショットを描画=不変(ライブ計算しない)。
 // 投稿自体に載るので、つながり相手(B)の投稿にも B のルールが正しく出る(他人ルールを別途取得しない)。
@@ -302,6 +389,7 @@ function renderWeek(){
     const sel=w.date===selectedDate, isToday=w.date===TODAY;
     const {d:dd}=parseYmd(w.date);
     const has=logEntries.some(e=>e.type==='workout'&&e.date===w.date);
+    const hasRest=!has && logEntries.some(e=>e.type==='rest'&&e.date===w.date);   // 休養日はスレートのドット
     const dc=dowColor(w.date);   // 土=青/日祝=赤(faint)。sel/today は teal 優先
     // teal language: selected=teal fill, today=teal ring + "今日" mark (both distinguishable)
     const cardCls = sel?'bg-accent border-accent':(isToday?'bg-card border-accent':'bg-card border-line');
@@ -310,7 +398,9 @@ function renderWeek(){
     const numCls = sel?'text-white':(isToday?'text-accent':'text-ink');
     const marker = isToday
       ? `<span class="text-[8px] font-extrabold leading-none ${sel?'text-white/90':'text-accent'}">今日</span>`
-      : `<span class="w-1 h-1 rounded-full ${has?(sel?'bg-white/70':'bg-accent'):(sel?'bg-white/40':'bg-line')}"></span>`;
+      : hasRest
+        ? `<span class="w-1 h-1 rounded-full" style="background:${sel?'rgba(255,255,255,.6)':REST_COLOR}"></span>`
+        : `<span class="w-1 h-1 rounded-full ${has?(sel?'bg-white/70':'bg-accent'):(sel?'bg-white/40':'bg-line')}"></span>`;
     return `<button class="day-pill pop w-full py-3 rounded-2xl flex flex-col items-center gap-1.5 border ${cardCls}" data-date="${w.date}">
       <span class="text-[11px] font-bold ${labelCls}" ${labelStyle}>${w.d}</span>
       <span class="text-[16px] font-extrabold ${numCls}">${dd}</span>
@@ -344,24 +434,36 @@ const planStat = {
   changed:{label:'予定変更', cls:'text-[#E0A53A]', dot:'#E0A53A', dim:false, check:false},
   todo:   {label:'未実施',   cls:'text-faint',     dot:'#D2D5CF', dim:true,  check:false},
 };
+// 休養(rest)=独立ステータス。落ち着いたスレート＋🌙。運動の緑とは別トーン(ノーシェイム=計画的回復)。
+const REST_COLOR='#8993A8';
 function workoutCard(p){
   const m=members[p.who]; const s=planStat[p.status]||planStat.planned;
-  const active = timerRunning && activeEntryIds.includes(p.id);   // タイマー作動中=実施中
+  const isRest = p.type==='rest';
+  // 実施中(🏃): 自分=タイマー作動中 / 他人=started_atが今日ありdone前(B-1のstarted_at由来・リロードで反映)。休養にタイマーは無い。
+  const startedToday = p.startedAt && isTodayIso(p.startedAt);
+  const active = !isRest && ((timerRunning && activeEntryIds.includes(p.id))
+             || (p.who!==CURRENT_USER && startedToday && p.status!=='done'));
   const timeTxt = /^\d{1,2}:\d{2}$/.test(p.time||'') ? `予定 ${p.time}` : '予定';   // HH:mm のときだけ時刻
   const sh=memberShare[p.who]||{};
   const wtLine = sh.wt ? `<span class="text-[11px] font-bold ${sh.wt.startsWith('▼')?'text-accent':'text-sub'}">${sh.wt}</span>` : '';
-  return `<div class="entry-edit pop cursor-pointer flex items-center gap-3 rounded-2xl bg-card border border-line shadow-card p-3.5 ${s.dim?'opacity-60':''}" data-id="${p.id}">
+  const partsHtml = isRest
+    ? `<span class="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full text-white" style="background:${REST_COLOR}">🌙 休養日</span>`
+    : partsOrDefault(p.tags);   // 部位なしは「運動」チップ
+  const statusHtml = isRest
+    ? `<span class="flex items-center gap-1.5 text-[12px] font-bold" style="color:${REST_COLOR}"><span class="w-1.5 h-1.5 rounded-full" style="background:${REST_COLOR}"></span>${p.status==='done'?'休んだ':'休養'}</span>`
+    : (active
+        ? `<span class="flex items-center gap-1.5 text-[12px] font-extrabold text-accent"><span class="w-1.5 h-1.5 rounded-full bg-accent animate-pulse"></span>🏃 トレーニング中</span>`
+        : `<span class="flex items-center gap-1.5 text-[12px] font-bold ${s.cls}"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.label}</span>`);
+  return `<div class="entry-edit pop cursor-pointer flex items-center gap-3 rounded-2xl bg-card border border-line shadow-card p-3.5 ${(!isRest&&s.dim)?'opacity-60':''}" data-id="${p.id}">
     ${avatar(m,40,p.who)}
     <div class="flex-1">
       <div class="flex flex-wrap items-center gap-1.5">
-        <span class="text-[14px] font-extrabold text-ink">${m.name}</span>${(p.tags||[]).map(t=>chip(t)).join('')}
+        <span class="text-[14px] font-extrabold text-ink">${m.name}</span>${partsHtml}
       </div>
-      <p class="text-[11px] text-faint mt-1">${timeTxt}${p.note?` ・ <span class="font-bold text-[#E0A53A]">${p.note}</span>`:''}</p>
+      ${isRest ? (p.note?`<p class="text-[11px] text-faint mt-1"><span class="font-bold text-[#E0A53A]">${p.note}</span></p>`:'') : `<p class="text-[11px] text-faint mt-1">${timeTxt}${p.note?` ・ <span class="font-bold text-[#E0A53A]">${p.note}</span>`:''}</p>`}
     </div>
     <div class="flex flex-col items-end gap-1">
-      ${active
-        ? `<span class="flex items-center gap-1.5 text-[12px] font-extrabold text-accent"><span class="w-1.5 h-1.5 rounded-full bg-accent animate-pulse"></span>🏃 トレーニング中</span>`
-        : `<span class="flex items-center gap-1.5 text-[12px] font-bold ${s.cls}"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.label}</span>`}
+      ${statusHtml}
       ${wtLine}
     </div>
   </div>`;
@@ -382,7 +484,9 @@ function mealRow(m){
 }
 function renderDayList(){
   document.getElementById('dayListLabel').textContent = fmtLabel(selectedDate);
-  const items = logEntries.filter(e=>e.type==='workout'&&e.date===selectedDate);
+  // 1日1予定: 選択日に自分の予定があれば「編集」、無ければ「＋ 追記」
+  const addBtn=document.getElementById('dayAddBtn'); if(addBtn) addBtn.textContent = todayPlan(selectedDate) ? '編集' : '＋ 追記';
+  const items = logEntries.filter(e=>(e.type==='workout'||e.type==='rest')&&e.date===selectedDate);   // 休養も予定リストに出す
   // TODAY は体重/食事を専用カードが担当。非TODAY(過去/未来)はこのリストに出す。
   const weight = logEntries.find(e=>e.type==='weight'&&e.who===CURRENT_USER&&e.date===selectedDate);
   const meal   = logEntries.find(e=>e.type==='meal'  &&e.who===CURRENT_USER&&e.date===selectedDate);
@@ -397,7 +501,12 @@ function renderDayList(){
          <p class="text-[12px] text-faint font-bold">まだ予定がありません</p>
          <p class="text-[11px] text-faint mt-1">「＋追記」で宣言できます</p>
        </div>`;
-  document.getElementById('planList').innerHTML = (items.length || extra.length) ? rows : empty;
+  // つながっている仲間の同日の運動宣言＋ステータス(自分の下に)。体重/食事は経路になく漏れない。
+  const mates = connectedWork.filter(e=>e.date===selectedDate);
+  const mateRows = mates.length
+    ? `<p class="text-[11px] font-bold text-faint mt-4 mb-1.5 ml-0.5">つながっている仲間</p>` + mates.map(workoutCard).join('')
+    : '';
+  document.getElementById('planList').innerHTML = ((items.length || extra.length) ? rows : empty) + mateRows;
   if(typeof renderMeal==='function') renderMeal();
   if(typeof renderDayWeight==='function') renderDayWeight();
 }
@@ -412,7 +521,10 @@ function renderMonth(){
     const ds=ymd(y,m,d);
     const isToday=ds===TODAY, sel=ds===selectedDate;
     const dayTags=logEntries.filter(e=>e.type==='workout'&&e.date===ds).flatMap(e=>e.tags||[]);
-    const dots=dayTags.slice(0,3).map(t=>`<span class="w-1.5 h-1.5 rounded-full" style="background:${tagDot[t]||'#9AA09A'}"></span>`).join('');
+    const isRestDay=!dayTags.length && logEntries.some(e=>e.type==='rest'&&e.date===ds);   // 運動が無く休養がある日
+    const dots=(isRestDay
+      ? `<span class="w-1.5 h-1.5 rounded-full" style="background:${REST_COLOR}"></span>`
+      : dayTags.slice(0,3).map(t=>`<span class="w-1.5 h-1.5 rounded-full" style="background:${partColor(t)}"></span>`).join(''));
     const more=dayTags.length>3?`<span class="text-[8px] font-bold text-faint leading-none">+${dayTags.length-3}</span>`:'';
     const dc=dowColor(ds);   // 土=青/日祝=赤(faint)。sel/today は teal 優先
     const numCls = sel
@@ -432,7 +544,8 @@ function renderMonthDetail(){
   const el=document.getElementById('monthDetail'); if(!el) return;
   const {m,d}=parseYmd(selectedDate);
   const dateLabel=`${m+1}月${d}日(${WD[wdIndex(selectedDate)]})`;
-  const workouts=logEntries.filter(e=>e.type==='workout'&&e.date===selectedDate);
+  const workouts=logEntries.filter(e=>(e.type==='workout'||e.type==='rest')&&e.date===selectedDate);   // 休養も含める
+  const restChipHtml=`<span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full text-white" style="background:${REST_COLOR}">🌙 休養日</span>`;
   const isPast=selectedDate<TODAY;
   let head, body;
   if(isPast){
@@ -443,11 +556,14 @@ function renderMonthDetail(){
     const rows=[];
     workouts.forEach(e=>{
       const mem=members[e.who]; const s=planStat[e.status]||planStat.done;
-      const durTxt=e.dur?`<span class="text-[11px] font-bold text-sub shrink-0">${e.dur}</span>`:`<span class="flex items-center gap-1 text-[11px] font-bold ${s.cls} shrink-0"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.label}</span>`;
+      const isRest=e.type==='rest';
+      const durTxt=isRest
+        ? `<span class="text-[11px] font-bold shrink-0" style="color:${REST_COLOR}">休んだ</span>`
+        : (e.dur?`<span class="text-[11px] font-bold text-sub shrink-0">${e.dur}</span>`:`<span class="flex items-center gap-1 text-[11px] font-bold ${s.cls} shrink-0"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.label}</span>`);
       rows.push(`<div class="entry-edit pop cursor-pointer flex items-center gap-2.5" data-id="${e.id}">
         ${avatar(mem,28)}
         <span class="text-[12px] font-bold text-ink w-12 shrink-0">${mem.name}</span>
-        <div class="flex flex-wrap items-center gap-1.5">${(e.tags||[]).map(t=>chip(t)).join('')}</div>
+        <div class="flex flex-wrap items-center gap-1.5">${isRest?restChipHtml:partsOrDefault(e.tags)}</div>
         <span class="ml-auto">${durTxt}</span>
       </div>`);
     });
@@ -463,12 +579,15 @@ function renderMonthDetail(){
     head=`<p class="text-[12px] font-bold text-sub mb-2.5">${dateLabel}・誰が何をする</p>`;
     body = workouts.length
       ? `<div class="space-y-2.5">`+workouts.map(e=>{
-          const mem=members[e.who]; const s=planStat[e.status]||planStat.planned;
+          const mem=members[e.who]; const s=planStat[e.status]||planStat.planned; const isRest=e.type==='rest';
+          const statusChip=isRest
+            ? `<span class="ml-auto flex items-center gap-1 text-[11px] font-bold shrink-0" style="color:${REST_COLOR}"><span class="w-1.5 h-1.5 rounded-full" style="background:${REST_COLOR}"></span>休養</span>`
+            : `<span class="ml-auto flex items-center gap-1 text-[11px] font-bold ${s.cls} shrink-0"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.label}</span>`;
           return `<div class="entry-edit pop cursor-pointer flex items-center gap-2.5" data-id="${e.id}">
             ${avatar(mem,28)}
             <span class="text-[12px] font-bold text-ink w-12 shrink-0">${mem.name}</span>
-            <div class="flex flex-wrap items-center gap-1.5">${(e.tags||[]).map(t=>chip(t)).join('')}</div>
-            <span class="ml-auto flex items-center gap-1 text-[11px] font-bold ${s.cls} shrink-0"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.label}</span>
+            <div class="flex flex-wrap items-center gap-1.5">${isRest?restChipHtml:partsOrDefault(e.tags)}</div>
+            ${statusChip}
           </div>`;
         }).join('')+`</div>`
       : `<p class="text-[11px] text-faint">この日の予定はまだありません</p>`;
@@ -478,8 +597,9 @@ function renderMonthDetail(){
 }
 
 /* ---------- bottom sheet (declare / log) ---------- */
-const SHEET_TAGS=['胸トレ','背中','脚','肩','腕','有酸素','ストレッチ','休養'];
-let sfType='workout', sfTags=['背中'], sfEditId=null;
+const SHEET_TAGS=['胸トレ','背中','脚','肩','腕','有酸素','ストレッチ'];   // 休養は部位ではなく独立ステータス(sfRest)へ
+let sfType='workout', sfTags=[], sfEditId=null;   // 新規予定は部位を初期選択しない(ユーザーが選ぶ)
+let sfRest=false;   // 休養トグル(部位と排他)。true=type:'rest'で保存
 function sheetTitle(){
   const ed=sfEditId!=null;
   if(sfType==='workout') return ed?'運動を編集':'予定を宣言';
@@ -497,19 +617,33 @@ function setSheetType(t){
   document.getElementById('sheetTitle').textContent=sheetTitle();
 }
 function renderSheetTags(){
-  // fixed 部位 + any user-added free-text tags (＋その他), then the add button
-  const list=[...SHEET_TAGS, ...sfTags.filter(t=>!SHEET_TAGS.includes(t))];
-  document.getElementById('sfTags').innerHTML=list.map(t=>
-    `<button class="sf-tag pop text-[11px] font-bold px-3 py-1.5 rounded-full border ${sfTags.includes(t)?'sel':'border-line text-ink bg-card'}" data-tag="${t}"><span class="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style="background:${tagDot[t]||'#9AA09A'}"></span>${t}</button>`
-  ).join('')
-    + `<button class="sf-tag-other pop text-[11px] font-bold px-3 py-1.5 rounded-full border border-dashed border-line text-sub bg-card">＋その他</button>`;
+  // 並び: 固定部位＋userParts(色付き・×削除可) → 🌙休養 → ＋その他(常に最後)
+  // 🌙 休養: 選ぶと部位が全て外れる/部位を選ぶと外れる(排他)。運動の緑とは別トーン。
+  const restBtn=`<button class="sf-rest pop inline-flex items-center gap-1 text-[12px] font-bold px-3 py-1.5 rounded-full border ${selCls(sfRest)} text-ink" style="${selStyle(REST_COLOR,sfRest)}">🌙 休養</button>`;
+  document.getElementById('sfTags').innerHTML = partChips(SHEET_TAGS, SHEET_SET, sfTags, 'sheet') + restBtn + tagAdderHtml('sheet');
+}
+// ボトムシートの排他制御: exceptId 以外の全シート/スクリムを閉じる=同時に複数開かない。
+// 「親に重ねる」サブシート(tagOther)は except で親を残す。これが3枚重なりバグの根治。
+const SHEET_PAIRS=[
+  ['sheet','sheetScrim'],['profileSheet','profileScrim'],['notifySheet','notifyScrim'],
+  ['settingsSheet','settingsScrim'],['membersSheet','membersScrim'],['memberActSheet','memberActScrim'],
+  ['pcSheet','pcScrim'],['ruleSheet','ruleScrim'],
+  ['ruleXSheet','ruleXScrim'],['startSheet','startScrim'],['postSheet','postScrim'],
+];
+function closeAllSheets(exceptId){
+  SHEET_PAIRS.forEach(([s,scr])=>{
+    if(s===exceptId) return;
+    const se=document.getElementById(s); if(se) se.classList.remove('open');
+    const sc=document.getElementById(scr); if(sc) sc.classList.add('hidden');
+  });
 }
 function showSheet(){
+  closeAllSheets('sheet');   // 予定シートを開く前に他シートを全て閉じる
   document.getElementById('sheetScrim').classList.remove('hidden');
   document.getElementById('sheet').classList.add('open');
 }
 function openSheet(type, date){
-  sfEditId=null; sfTags=['背中'];
+  sfEditId=null; sfTags=[]; sfRest=false; tagAdding.sheet=false;   // 新規は部位未選択・休養オフ・入力も閉じた状態から
   ['sfTime','sfKg','sfKcal'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
   document.getElementById('sfTypeToggle').classList.remove('hidden');
   document.getElementById('sheetDelete').classList.add('hidden');
@@ -518,15 +652,22 @@ function openSheet(type, date){
   renderSheetTags();
   showSheet();
 }
+// 1日1予定: 選択日に自分の予定(運動/休養)が既にあれば「編集」、無ければ新規。部位追加/時間変更/休養切替は編集で行う。
+function todayPlan(date){ return logEntries.find(e=>(e.type==='workout'||e.type==='rest')&&e.who===CURRENT_USER&&e.date===(date||selectedDate)); }
+function openWorkoutPlan(){
+  const existing=todayPlan(selectedDate);
+  if(existing) openSheetEdit(existing.id); else openSheet('workout', selectedDate);
+}
 function openSheetEdit(id){
   const en=logEntries.find(x=>x.id===id); if(!en) return;
-  sfEditId=id;
+  sfEditId=id; tagAdding.sheet=false;
   document.getElementById('sfTypeToggle').classList.add('hidden');   // lock type while editing
   document.getElementById('sheetDelete').classList.remove('hidden');
-  setSheetType(en.type);
+  const isRest=en.type==='rest';
+  setSheetType(isRest?'workout':en.type);   // 休養は workout シートで休養トグルON状態で編集
   document.getElementById('sfDate').value=en.date;
   // <input type="time"> は HH:mm のみ受け付ける。'いま'/'—' 等(タイマー由来)は空にして警告を出さない。
-  if(en.type==='workout'){ sfTags=(en.tags||[]).slice(); renderSheetTags(); document.getElementById('sfTime').value=/^\d{1,2}:\d{2}$/.test(en.time||'')?en.time:''; }
+  if(en.type==='workout'||isRest){ sfRest=isRest; sfTags=isRest?[]:(en.tags||[]).slice(); renderSheetTags(); document.getElementById('sfTime').value=/^\d{1,2}:\d{2}$/.test(en.time||'')?en.time:''; }
   else if(en.type==='weight'){ document.getElementById('sfKg').value=en.kg; }
   else { document.getElementById('sfKcal').value=en.kcal; }   // 食事は摂取kcalのみ(P/F/C廃止)
   showSheet();
@@ -547,11 +688,13 @@ function confirmSheet(){
   const target=editing?logEntries.find(e=>e.id===sfEditId):null;
   let saved=null;   // the entry to persist (edit=overwrite by id, new=append)
   if(sfType==='workout'){
-    if(!sfTags.length){ closeSheet(); return; }
+    // 部位なしも許可(「運動」とだけ記録・投稿シートで後から選べる)。必須にしない。
+    // 休養トグルON=type:'rest'(部位なし・独立ステータス)。OFF=type:'workout'。
     const status=editing&&target?target.status:(date<TODAY?'done':'planned');
-    const fields={date, tags:sfTags.slice(), time:document.getElementById('sfTime').value||'—', status};
+    const etype = sfRest ? 'rest' : 'workout';
+    const fields={date, type:etype, tags:sfRest?[]:sfTags.slice(), time:document.getElementById('sfTime').value||'—', status};
     if(editing&&target){ Object.assign(target,fields); saved=target; }
-    else{ saved={id:newId(), type:'workout', who:CURRENT_USER, ...fields}; logEntries.push(saved); }
+    else{ saved={id:newId(), who:CURRENT_USER, ...fields}; logEntries.push(saved); }
   }else if(sfType==='weight'){
     const kg=parseFloat(document.getElementById('sfKg').value);
     if(!isNaN(kg)){
@@ -648,7 +791,7 @@ function renderLimits(){
 }
 // ✕の軽い2択(ノーシェイム): 「また1日目から育てる」=リセット / 「このルールを終える」=削除。
 let ruleXTarget=null;
-function openRuleX(i){ ruleXTarget=i; document.getElementById('ruleXScrim').classList.remove('hidden'); document.getElementById('ruleXSheet').classList.add('open'); }
+function openRuleX(i){ closeAllSheets('ruleXSheet'); ruleXTarget=i; document.getElementById('ruleXScrim').classList.remove('hidden'); document.getElementById('ruleXSheet').classList.add('open'); }
 function closeRuleX(){ document.getElementById('ruleXSheet').classList.remove('open'); document.getElementById('ruleXScrim').classList.add('hidden'); ruleXTarget=null; }
 function replantRule(){ const l=limits[ruleXTarget]; if(l){ l.streakStart=TODAY; upsertRule(l); renderLimits(); if(typeof renderProgressHero==='function') renderProgressHero(); } closeRuleX(); }
 function endRule(){ const i=ruleXTarget; const l=limits[i]; if(l){ removeRule(l.id); limits.splice(i,1); renderLimits(); if(typeof renderProgressHero==='function') renderProgressHero(); } closeRuleX(); }
@@ -657,6 +800,7 @@ function endRule(){ const i=ruleXTarget; const l=limits[i]; if(l){ removeRule(l.
 // 記録ヒーローの「連続記録」は当面 各ルールの日数連続の最大を表示(将来=運動ベース・実日付化とセット)。
 function curStreak(){ return limits.reduce((m,l)=>Math.max(m,ruleStreak(l)),0); }
 function openRule(){
+  closeAllSheets('ruleSheet');
   document.getElementById('rfLabel').value='';
   document.getElementById('ruleScrim').classList.remove('hidden');
   document.getElementById('ruleSheet').classList.add('open');
@@ -856,6 +1000,7 @@ function updateProfilePreview(){
   document.getElementById('pfMaint').textContent=Math.round(v).toLocaleString();
 }
 function openProfile(){
+  closeAllSheets('profileSheet');
   applyAvatarEl(document.getElementById('pfAvatar'), members[CURRENT_USER]);   // 開時に現在のアバターを同期
   document.getElementById('pfNick').value=profile.nick;
   document.getElementById('pfHeight').value=profile.height;
@@ -876,7 +1021,10 @@ function pcRuleRow(l){
   return `<div class="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2"><span class="text-[14px]">${l.emoji||'🎯'}</span><span class="flex-1 text-[13px] font-bold text-ink truncate">${l.label}</span>${l.streakStart?`<span class="text-[11px] font-extrabold text-accent whitespace-nowrap">🔥${ruleStreak(l)}</span>`:''}</div>`;
 }
 // タップされた相手のカードを表示。自分=own limits、相手=公開ルールをその都度取得(rules RLSがpub＋つながりを担保)。
+let pcFromMembers=false;
 async function openProfileCard(userId){
+  pcFromMembers = document.getElementById('membersSheet').classList.contains('open');   // 復帰先の記憶
+  closeAllSheets();   // 常に1枚
   const id = userId || CURRENT_USER;
   const m = members[id] || {};
   applyAvatarEl(document.getElementById('pcAvatar'), m);
@@ -894,6 +1042,7 @@ async function openProfileCard(userId){
 function closeProfileCard(){
   document.getElementById('pcSheet').classList.remove('open');
   document.getElementById('pcScrim').classList.add('hidden');
+  if(pcFromMembers){ pcFromMembers=false; openMembers(); }   // メンバー一覧から来たら戻る
 }
 // つながっているメンバー一覧(自分＋public_profilesで見えるつながり相手)。名前・アバターを一覧表示。
 // スペース切替ではなく「つながっている人の一覧」(つながり型)。行内アバターのタップ→その人のプロフィールカード。
@@ -918,11 +1067,12 @@ function renderMembersList(){
     // 参加(非owner)中のグループがあるときだけ「グループを抜ける」を出す(ノーシェイム・静かに)
     + (joinedSpaceIds.length?`<button class="group-leave pop w-full mt-3 text-[12px] font-bold text-sub border border-line rounded-2xl py-2.5">グループを抜ける</button>`:'');
 }
-function openMembers(){ renderMembersList(); document.getElementById('membersScrim').classList.remove('hidden'); document.getElementById('membersSheet').classList.add('open'); }
+function openMembers(){ closeAllSheets('membersSheet'); renderMembersList(); document.getElementById('membersScrim').classList.remove('hidden'); document.getElementById('membersSheet').classList.add('open'); }
 function closeMembers(){ document.getElementById('membersSheet').classList.remove('open'); document.getElementById('membersScrim').classList.add('hidden'); }
 // メンバー排除/離脱の確認シート(JSのconfirm()は使わない=画面ブロック回避)。
 let memberAct=null;   // {kind:'remove',userId,spaceId} | {kind:'leave',spaceIds:[]}
 function openMemberRemove(userId, spaceId){
+  closeAllSheets();   // 常に1枚
   const m=members[userId]||{};
   memberAct={kind:'remove', userId, spaceId};
   document.getElementById('memberActMsg').textContent=`${m.name||'この人'}をグループから外しますか？`;
@@ -931,19 +1081,21 @@ function openMemberRemove(userId, spaceId){
   document.getElementById('memberActSheet').classList.add('open');
 }
 function openGroupLeave(){
+  closeAllSheets();   // 常に1枚
   memberAct={kind:'leave', spaceIds:joinedSpaceIds.slice()};
   document.getElementById('memberActMsg').textContent='参加しているグループから抜けますか？（つながりが解除されます）';
   document.getElementById('memberActConfirm').textContent='抜ける';
   document.getElementById('memberActScrim').classList.remove('hidden');
   document.getElementById('memberActSheet').classList.add('open');
 }
-function closeMemberAct(){
+function closeMemberAct(reopenMembers){
   document.getElementById('memberActSheet').classList.remove('open');
   document.getElementById('memberActScrim').classList.add('hidden');
   memberAct=null;
+  if(reopenMembers) openMembers();   // キャンセル時はメンバー一覧へ復帰
 }
 async function confirmMemberAct(){
-  const act=memberAct; closeMemberAct();
+  const act=memberAct; closeMemberAct(false);   // 実行後はreloadするので復帰不要
   if(!act) return;
   const ok = act.kind==='remove'
     ? await removeGroupMember(act.spaceId, act.userId)
@@ -952,9 +1104,9 @@ async function confirmMemberAct(){
   else showToast('操作に失敗しました。通信を確認してください');
 }
 /* ---------- 通知パネル / 設定 / オンボーディングツアー(器) ---------- */
-function openNotify(){ document.getElementById('notifyScrim').classList.remove('hidden'); document.getElementById('notifySheet').classList.add('open'); }
+function openNotify(){ closeAllSheets('notifySheet'); document.getElementById('notifyScrim').classList.remove('hidden'); document.getElementById('notifySheet').classList.add('open'); }
 function closeNotify(){ document.getElementById('notifySheet').classList.remove('open'); document.getElementById('notifyScrim').classList.add('hidden'); }
-function openSettings(){ closeProfile(); document.getElementById('settingsScrim').classList.remove('hidden'); document.getElementById('settingsSheet').classList.add('open'); }
+function openSettings(){ closeAllSheets('settingsSheet'); document.getElementById('settingsScrim').classList.remove('hidden'); document.getElementById('settingsSheet').classList.add('open'); }
 function closeSettings(){ document.getElementById('settingsSheet').classList.remove('open'); document.getElementById('settingsScrim').classList.add('hidden'); }
 // つながる(グループ招待): コード発行/コピー/参加。参加成功で再ロードしてタイムラインに反映。
 let lastInviteCode=null;
@@ -1014,29 +1166,7 @@ function endTour(){
   if(members[CURRENT_USER]) markTourDone(CURRENT_USER);   // 完了を保存(次回は出さない)
 }
 function tourNext(){ if(tourIdx>=TOUR_STEPS.length-1){ endTour(); } else { tourIdx++; renderTourStep(); } }
-// 「＋その他」カスタムタグ入力(prompt置換の共通ボトムシート)。ctx=start/sheet/post
-let tagOtherCtx=null;
-function openTagOther(ctx){
-  tagOtherCtx=ctx;
-  const inp=document.getElementById('tagOtherInput'); if(inp){ inp.value=''; }
-  document.getElementById('tagOtherScrim').classList.remove('hidden');
-  document.getElementById('tagOtherSheet').classList.add('open');
-  if(inp) setTimeout(()=>inp.focus(),50);
-}
-function closeTagOther(){
-  document.getElementById('tagOtherSheet').classList.remove('open');
-  document.getElementById('tagOtherScrim').classList.add('hidden');
-  tagOtherCtx=null;
-}
-function confirmTagOther(){
-  const v=(document.getElementById('tagOtherInput').value||'').trim();
-  if(v){
-    if(tagOtherCtx==='start'){ if(!startTags.includes(v)) startTags.push(v); renderStartTags(); }
-    else if(tagOtherCtx==='sheet'){ if(!sfTags.includes(v)) sfTags.push(v); renderSheetTags(); }
-    else if(tagOtherCtx==='post'){ if(!postTags.includes(v)) postTags.push(v); renderPostTags(); }
-  }
-  closeTagOther();
-}
+// （「＋その他」は tagAdderHtml/openTagInput 等のインライン方式に置換済み=シートを開かない）
 // nick is the single source of truth for display name + avatar initial (header + 記録 hero).
 // 画像があれば画像、無ければ頭文字(ヘッダ・記録ヒーロー・プロフィールシート共通)
 function applyAvatarEl(el, m){ if(!el || !m) return;
@@ -1087,11 +1217,20 @@ document.querySelectorAll('.nav-btn').forEach(b=> b.addEventListener('click',()=
 document.addEventListener('click',e=>{
   // ツアー表示中は「次へ/スキップ」以外のクリックを全遮断(背面UIの誤操作・シート誤起動を根絶)
   if(tourOpen){ if(e.target.closest('#tourNext')) tourNext(); else if(e.target.closest('#tourSkip')) endTour(); return; }
+  // 「＋その他」インライン入力(シートを開かない)。処理後 return で後続ハンドラに伝播させない。
+  { const to=e.target.closest('.tag-other'); if(to){ openTagInput(to.dataset.ctx); return; } }
+  { const ta=e.target.closest('.tag-add');   if(ta){ addTagFromInput(ta.dataset.ctx); return; } }
+  { const tc=e.target.closest('.tag-close'); if(tc){ closeTagInput(tc.dataset.ctx); return; } }
+  // 部位チップ: ×=即削除(確認なし) / 本体=選択トグル。全ピッカー共通(data-ctx)。
+  { const pd=e.target.closest('.part-del'); if(pd){ deleteCustomPart(pd.dataset.tag, pd.dataset.ctx); return; } }
+  { const pk=e.target.closest('.pk-tag'); if(pk){ const t=pk.dataset.tag, ctx=pk.dataset.ctx, a=tagArr(ctx); const i=a.indexOf(t); if(i>=0) a.splice(i,1); else a.push(t); if(ctx==='sheet') sfRest=false; tagRender(ctx); return; } }
   const r=e.target.closest('.react');
   if(r){
-    const cnt=r.querySelector('.cnt');
-    if(!r.classList.contains('reacted')){ r.classList.add('reacted'); cnt.textContent=(+cnt.textContent)+1; }
-    else{ r.classList.remove('reacted'); cnt.textContent=(+cnt.textContent)-1; }
+    const pid=r.dataset.post, kind=r.dataset.k;
+    // 楽観更新(ローカル即反映)→裏で永続化。付け外しのトグル。付与時は③通知がB-1トリガーで発火。
+    if(reactMine(pid,kind)){ reactionRows=reactionRows.filter(x=>!(x.post_id===pid&&x.user_id===CURRENT_USER&&x.kind===kind)); removeReaction(pid,kind); }
+    else{ reactionRows.push({post_id:pid,user_id:CURRENT_USER,kind}); addReaction(pid,kind); }
+    renderFeed();
   }
   const seg=e.target.closest('.seg-btn');
   if(seg){
@@ -1117,16 +1256,8 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#ruleCancel')||e.target.closest('#ruleScrim')) closeRule();
   if(e.target.closest('.start-workout')) onStartWorkout();
   if(e.target.closest('.stop-workout')) onStopWorkout();
-  const sct=e.target.closest('.start-tag');
-  if(sct){ const t=sct.dataset.tag; const i=startTags.indexOf(t); if(i>=0) startTags.splice(i,1); else startTags.push(t); renderStartTags(); }
-  if(e.target.closest('.start-tag-other')) openTagOther('start');
   if(e.target.closest('#startGo')) onStartGo();
   if(e.target.closest('#startCancel')||e.target.closest('#startScrim')) closeStartSheet();
-  const ptag=e.target.closest('.ps-tag');
-  if(ptag){ const t=ptag.dataset.tag; const i=postTags.indexOf(t); if(i>=0) postTags.splice(i,1); else postTags.push(t); renderPostTags(); }
-  if(e.target.closest('.ps-tag-other')) openTagOther('post');
-  if(e.target.closest('#tagOtherConfirm')) confirmTagOther();
-  if(e.target.closest('#tagOtherCancel')||e.target.closest('#tagOtherScrim')) closeTagOther();
   if(e.target.closest('#psCameraBtn')) document.getElementById('psCamera').click();   // カメラ直接起動
   if(e.target.closest('#psAlbumBtn')) document.getElementById('psAlbum').click();      // アルバム選択
   if(e.target.closest('#postSubmit')) submitPost();
@@ -1156,12 +1287,10 @@ document.addEventListener('click',e=>{
   const mcell=e.target.closest('.mcell');
   if(mcell){ selectedDate=mcell.dataset.date; renderMonth(); renderMonthDetail(); renderDayList(); }
 
-  if(e.target.closest('.declare-btn')||e.target.closest('.day-add')) openSheet('workout');
+  if(e.target.closest('.declare-btn')||e.target.closest('.day-add')) openWorkoutPlan();   // 既存予定があれば編集/無ければ新規(1日1予定)
   if(e.target.closest('.weight-add')) openSheet('weight', TODAY);   // 本日の体重カード → TODAY固定
   const sft=e.target.closest('.sf-type'); if(sft) setSheetType(sft.dataset.sftype);
-  const stag=e.target.closest('.sf-tag');
-  if(stag){ const t=stag.dataset.tag; const i=sfTags.indexOf(t); if(i>=0) sfTags.splice(i,1); else sfTags.push(t); renderSheetTags(); }
-  if(e.target.closest('.sf-tag-other')) openTagOther('sheet');
+  if(e.target.closest('.sf-rest')){ sfRest=!sfRest; if(sfRest) sfTags=[]; renderSheetTags(); }   // 休養=部位を全て外す(排他)
   if(e.target.closest('#sheetConfirm')) confirmSheet();
   if(e.target.closest('#sheetCancel')||e.target.closest('#sheetScrim')) closeSheet();
 
@@ -1176,7 +1305,7 @@ document.addEventListener('click',e=>{
   { const mr=e.target.closest('.member-remove'); if(mr) openMemberRemove(mr.dataset.user, mr.dataset.space); }
   if(e.target.closest('.group-leave')) openGroupLeave();
   if(e.target.closest('#memberActConfirm')) confirmMemberAct();
-  if(e.target.closest('#memberActCancel')||e.target.closest('#memberActScrim')) closeMemberAct();
+  if(e.target.closest('#memberActCancel')||e.target.closest('#memberActScrim')) closeMemberAct(true);
   if(e.target.closest('#bellBtn')) openNotify();
   if(e.target.closest('#notifyClose')||e.target.closest('#notifyScrim')) closeNotify();
   if(e.target.closest('#notifyTour')){ closeNotify(); openTour(); }
@@ -1193,6 +1322,12 @@ document.addEventListener('click',e=>{
 // live maintenance preview while editing the profile sheet
 document.addEventListener('input', e=>{ if(e.target.closest('#profileSheet')) updateProfilePreview(); });
 document.addEventListener('change', e=>{ if(e.target.id==='psCamera'||e.target.id==='psAlbum') handlePhoto(e.target.files && e.target.files[0]); });
+// 「＋その他」インライン入力: Enter=追加 / Esc=閉じる
+document.addEventListener('keydown', e=>{
+  const inp=e.target; if(!inp.classList || !inp.classList.contains('tag-input')) return;
+  if(e.key==='Enter'){ e.preventDefault(); addTagFromInput(inp.dataset.ctx); }
+  else if(e.key==='Escape'){ e.preventDefault(); closeTagInput(inp.dataset.ctx); }
+});
 
 /* ---------- init (runs once, after login) ---------- */
 let appStarted=false;
@@ -1203,6 +1338,7 @@ async function initApp(session){
     const { userId, spaceId, urow } = await bootstrap(session);
     CURRENT_USER=userId; SPACE_ID=spaceId;
     Object.assign(profile, profileFromRow(urow));
+    userParts = ((profile.settings && profile.settings.customTags) || []).slice();   // settings.customTags から復元
     members = { [CURRENT_USER]: { name:profile.nick, ini:firstCP(profile.nick), c:'#14B87C', photo:profile.photo } };
     // 他人の表示名/アバターは public_profiles(安全な窓)から。自分は自分のprofileを優先=上書きしない。
     (await loadPublicProfiles()).forEach(p=>{
@@ -1217,6 +1353,11 @@ async function initApp(session){
     // グループ管理: 外せるメンバー＋抜けられるグループを解決(メンバー一覧の管理操作用)
     const ga = await loadGroupAdmin();
     removableMembers = ga.removable; joinedSpaceIds = ga.joinedSpaceIds;
+    // B-2: つながり相手の今週の運動(仲間の今日の宣言用)＋リアクション。運動のみ・体重食事は返らない。
+    const wk = buildWeek(TODAY);
+    connectedWork = await loadConnectedWorkouts(wk[0].date, wk[6].date);
+    connectedWork.forEach(e=>{ if(e.who && !members[e.who]) members[e.who]={ name:'メンバー', ini:'?', c:'#9AA09A', photo:null }; });
+    reactionRows = await loadReactions();
   }catch(err){
     console.error('bootstrap/load failed:', err.message || err);
   }
