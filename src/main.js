@@ -2,7 +2,7 @@
 import './style.css';
 import Chart from 'chart.js/auto';   // auto = same all-controllers registration as the old UMD CDN
 import { supabase } from './supabase.js';
-import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler, markTourDone, loadPublicProfiles, loadPublicRules, createInvite, joinWithCode, loadGroupAdmin, removeGroupMember, leaveGroups, loadConnectedWorkouts, loadReactions, addReaction, removeReaction, saveSettings } from './db.js';
+import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler, markTourDone, loadPublicProfiles, loadPublicRules, createInvite, joinWithCode, loadGroupAdmin, removeGroupMember, leaveGroups, loadConnectedWorkouts, loadReactions, addReaction, removeReaction, saveSettings, loadPosts } from './db.js';
 
 /* ---------- members ---------- */
 // Flat initial state: just me. Friends arrive in the backend/sharing phase (I/I2).
@@ -107,8 +107,8 @@ function renderStartBar(){
        </div>`;
     return;
   }
-  // 運動開始は常に出す=休養日でもタイマーは使える(休養は宣言であって禁止ではない・気が変われば動ける)。
-  el.innerHTML = `<button class="start-workout pop bg-accent text-white text-[13px] font-extrabold rounded-full shadow-lift px-6 py-3 flex items-center gap-2"><span class="text-[12px]">▶</span>運動開始</button>`;
+  // 「運動記録」=後入れで記録(タイマーは記録シート内の計測オプション)。常に出す。
+  el.innerHTML = `<button class="record-open pop bg-accent text-white text-[13px] font-extrabold rounded-full shadow-lift px-6 py-3 flex items-center gap-2"><span class="text-[13px]">✎</span>運動記録</button>`;
 }
 function startTimer(tags, startedAtISO){
   timerTags=(tags||[]).slice();
@@ -211,44 +211,31 @@ function onStartGo(){
 function onStopWorkout(){
   if(timerInterval) clearInterval(timerInterval);
   timerRunning=false;
-  const ids=activeEntryIds.slice();   // 開始時に作った/印を付けた自分のエントリ(plan/no-plan共通)
-  activeEntryIds=[];                   // 実施中→実施済みへ遷移
-  const durSec=elapsedSec();           // 経過は started_at(壁時計)から算出=バックグラウンドでも正確
-  const dur=durFromSec(durSec);
-  timerStartedAt=null;
+  const durSec=elapsedSec();           // 経過は started_at(壁時計)基準=バックグラウンドでも正確
+  timerStartedAt=null; activeEntryIds=[];
   renderStartBar();
-  // 開始時に永続化済みのエントリを done に更新(二重作成しない)。保険: idが無ければ新規done。
-  if(ids.length){
-    ids.forEach(id=>{ const e=logEntries.find(x=>x.id===id); if(e){ e.status='done'; e.dur=dur; e.durSec=durSec; upsertEntry(e); } });
-  }else{
-    const en={id:newId(), date:TODAY, type:'workout', who:CURRENT_USER, tags:timerTags.slice(), time:'いま', dur, durSec, status:'done'};
-    logEntries.push(en); upsertEntry(en);
-  }
-  rerenderAfterChange();
-  // open the share (post) flow with the same tags + measured time
-  openPostSheet(timerTags, dur, durSec);
+  // 計測後は記録シートへ戻り、実施時間を埋めて「記録する」で確定(done化＋投稿)。ここでは作らない。
+  openRecordSheet({ tags: timerTags.slice(), durSec });
 }
-// タブを閉じて開き直し/再読込しても、DBに未終了の started_at(今日・done前)があれば「トレーニング中」を復元。
-// 経過は started_at 基準なので、閉じている間の時間も正しくカウントされている。
-function restoreActiveTimer(){
-  if(timerRunning) return;
-  const act = logEntries.filter(e=>e.type==='workout'&&e.who===CURRENT_USER&&e.startedAt&&e.status!=='done'&&isTodayIso(e.startedAt));
-  if(!act.length) return;
-  const startedAt = act.map(e=>e.startedAt).sort()[0];   // 最も早い開始時刻を基準に
-  timerFromPlan=true; activeEntryIds=act.map(e=>e.id);
-  startTimer([...new Set(act.flatMap(e=>e.tags||[]))], startedAt);   // renderStartBar で「◯分経過」を表示
-  renderDayList();   // 予定リストの当該エントリも「🏃 トレーニング中」に
-}
+// （restoreActiveTimer は廃止=タイマーは記録シート内の軽い計測オプションに格下げ。旧「🏃実施中」復元は不要）
 function renderPostTags(){
   const el=document.getElementById('psTags'); if(!el) return;
   // 予定/タイマーの部位を初期選択。ジムで変わることがあるので選び直せる。固定＋userParts＋末尾に「＋その他」
   el.innerHTML = partChips(SHEET_TAGS, SHEET_SET, postTags, 'post') + tagAdderHtml('post');
 }
-function openPostSheet(tags, dur, durSec){
-  closeAllSheets('postSheet');   // 投稿シートを開く前に他シートを全て閉じる
-  pendingPhoto=null; postCtx={dur, durSec}; tagAdding.post=false;
-  postTags=(tags||[]).slice(); renderPostTags();
-  document.getElementById('psDur').textContent='実施 '+dur;
+// 運動記録シート(旧投稿シートを流用)。後入れで 部位・実施時間(任意)・写真・ひとこと を入れ「記録する」で
+// done化＋投稿を一度に作る。タイマーは中の計測オプション。
+let recordDurSec=null;   // タイマーで計った秒数(あれば優先・なければ手入力の分を使う)
+function openRecordSheet(opts){
+  opts=opts||{};
+  closeAllSheets('postSheet');
+  pendingPhoto=null; tagAdding.post=false;
+  // 部位: タイマー計測後はその部位／直接開いた時は今日の予定の部位を初期選択(記録が楽)
+  const plan=logEntries.find(e=>e.type==='workout'&&e.who===CURRENT_USER&&e.date===TODAY);
+  postTags = (opts.tags && opts.tags.length) ? opts.tags.slice() : (plan ? (plan.tags||[]).slice() : []);
+  recordDurSec = opts.durSec ?? null;
+  renderPostTags();
+  document.getElementById('psDurMin').value = recordDurSec!=null ? Math.max(1,Math.round(recordDurSec/60)) : '';
   document.getElementById('psPhotoPreview').innerHTML='';
   document.getElementById('psText').value='';
   document.getElementById('psCamera').value=''; document.getElementById('psAlbum').value='';
@@ -256,18 +243,30 @@ function openPostSheet(tags, dur, durSec){
   document.getElementById('postSheet').classList.add('open');
 }
 function closePostSheet(){ document.getElementById('postSheet').classList.remove('open'); document.getElementById('postScrim').classList.add('hidden'); }
+// 記録シート内の「⏱ タイマーで計る」: シートを閉じて計測開始。終了(onStopWorkout)で記録シートに時間が入って戻る。
+function startRecordTimer(){ const tags=postTags.slice(); closePostSheet(); startTimer(tags); }
 function handlePhoto(file){
   if(!file) return;
   const reader=new FileReader();
   reader.onload=ev=>{ pendingPhoto=ev.target.result; document.getElementById('psPhotoPreview').innerHTML=`<img src="${pendingPhoto}" class="w-full h-40 object-cover rounded-xl mt-2">`; };
   reader.readAsDataURL(file);
 }
-function submitPost(){
-  if(!postCtx) return;
+function submitRecord(){
+  const tags=postTags.slice();
   const text=document.getElementById('psText').value.trim();
-  addPost(createPost({kind:'workout', who:CURRENT_USER, tags:postTags.slice(), dur:postCtx.dur, durSec:postCtx.durSec, photo:pendingPhoto, text, scope:'group'}));
-  postCtx=null; pendingPhoto=null;
+  const minVal=parseInt(document.getElementById('psDurMin').value);
+  const durSec = recordDurSec!=null ? recordDurSec : (!isNaN(minVal)&&minVal>0 ? minVal*60 : null);
+  const dur = durSec!=null ? durFromSec(durSec) : null;
+  // 今日の予定(運動/休養)があれば done 化(1日1予定維持・休養→運動切替)。無ければ新規done。
+  const plan=logEntries.find(e=>(e.type==='workout'||e.type==='rest')&&e.who===CURRENT_USER&&e.date===TODAY);
+  let en;
+  if(plan){ Object.assign(plan,{type:'workout', tags, status:'done', dur, durSec, time:/^\d{1,2}:\d{2}$/.test(plan.time||'')?plan.time:'いま'}); en=plan; }
+  else { en={id:newId(), date:TODAY, type:'workout', who:CURRENT_USER, tags, time:'いま', status:'done', dur, durSec}; logEntries.push(en); }
+  upsertEntry(en);
+  addPost(createPost({kind:'workout', who:CURRENT_USER, tags, dur, durSec, photo:pendingPhoto, text, scope:'group'}));   // 記録=投稿(通知②の対象)
+  pendingPhoto=null; recordDurSec=null;
   closePostSheet();
+  rerenderAfterChange();
   showPage('feed');
 }
 // 記録ヒーローを丸ごと再計算（renderProgressHero に統合。下位互換のため名前は残す）
@@ -460,10 +459,7 @@ const REST_COLOR='#8993A8';
 function workoutCard(p){
   const m=members[p.who]; const s=planStat[p.status]||planStat.planned;
   const isRest = p.type==='rest';
-  // 実施中(🏃): 自分=タイマー作動中 / 他人=started_atが今日ありdone前(B-1のstarted_at由来・リロードで反映)。休養にタイマーは無い。
-  const startedToday = p.startedAt && isTodayIso(p.startedAt);
-  const active = !isRest && ((timerRunning && activeEntryIds.includes(p.id))
-             || (p.who!==CURRENT_USER && startedToday && p.status!=='done'));
+  // 🏃ライブ表示は廃止(ライブ→記録の共有へ転換)。ステータスは 予定/実施済み/休養 のみ。
   const timeTxt = /^\d{1,2}:\d{2}$/.test(p.time||'') ? `予定 ${p.time}` : '予定';   // HH:mm のときだけ時刻
   const sh=memberShare[p.who]||{};
   const wtLine = sh.wt ? `<span class="text-[11px] font-bold ${sh.wt.startsWith('▼')?'text-accent':'text-sub'}">${sh.wt}</span>` : '';
@@ -472,9 +468,7 @@ function workoutCard(p){
     : partsOrDefault(p.tags);   // 部位なしは「運動」チップ
   const statusHtml = isRest
     ? `<span class="flex items-center gap-1.5 text-[12px] font-bold" style="color:${REST_COLOR}"><span class="w-1.5 h-1.5 rounded-full" style="background:${REST_COLOR}"></span>${p.status==='done'?'休んだ':'休養'}</span>`
-    : (active
-        ? `<span class="flex items-center gap-1.5 text-[12px] font-extrabold text-accent"><span class="w-1.5 h-1.5 rounded-full bg-accent animate-pulse"></span>🏃 トレーニング中</span>`
-        : `<span class="flex items-center gap-1.5 text-[12px] font-bold ${s.cls}"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.label}</span>`);
+    : `<span class="flex items-center gap-1.5 text-[12px] font-bold ${s.cls}"><span class="w-1.5 h-1.5 rounded-full" style="background:${s.dot}"></span>${s.label}</span>`;
   return `<div class="entry-edit pop cursor-pointer flex items-center gap-3 rounded-2xl bg-card border border-line shadow-card p-3.5 ${(!isRest&&s.dim)?'opacity-60':''}" data-id="${p.id}">
     ${avatar(m,40,p.who)}
     <div class="flex-1">
@@ -1242,7 +1236,29 @@ function showPage(id){
   document.querySelector('main').scrollTop=0;
   document.getElementById('startBar').classList.toggle('hidden', id!=='schedule');
   if(id==='progress') setTimeout(initCharts,60);
+  if(id==='schedule'||id==='feed') refreshConnected();   // 画面に入った瞬間に最新化(near-live)
 }
+// フィードを見ているか(スクロール保護のため・見ている時は再構築しない)
+function feedIsActive(){ const f=document.getElementById('feed'); return !!(f && f.classList.contains('active')); }
+// A/B/C共通の土台。つながり相手の運動(connectedWork)＋リアクション＋投稿を再取得して再描画。
+// 使うのは既存のRLS実証済みロードのみ=新しい漏洩経路なし(体重/食事は取得列にもRLSにも乗らない)。
+let refreshing=false;
+async function refreshConnected(){
+  if(refreshing || CURRENT_USER==='boy') return; refreshing=true;
+  try{
+    const wk=buildWeek(TODAY);
+    const [cw, rx, ps]=await Promise.all([ loadConnectedWorkouts(wk[0].date, wk[6].date), loadReactions(), loadPosts() ]);
+    connectedWork=cw; reactionRows=rx;
+    if(ps){ posts.length=0; posts.push(...ps); }
+    connectedWork.forEach(e=>{ if(e.who && !members[e.who]) members[e.who]={ name:'メンバー', ini:'?', c:'#9AA09A', photo:null }; });
+    posts.forEach(p=>{ if(p.who && !members[p.who]) members[p.who]={ name:'メンバー', ini:'?', c:'#9AA09A', photo:null }; });
+    renderDayList(); renderGroup();
+    if(!feedIsActive()) renderFeed();   // フィード非表示時のみ再構築=スクロールが飛ばない(見ている時はプル更新で)
+  }catch(err){ console.error('refreshConnected failed:', err.message || err); }
+  finally{ refreshing=false; }
+}
+// 30秒ごと自動更新(見ている間だけ・背面では叩かない=バッテリー配慮)
+// (30秒自動更新は廃止=ライブ感不要。開いた時・タブ復帰時・プル更新で最新化する)
 document.querySelectorAll('.nav-btn').forEach(b=> b.addEventListener('click',()=>showPage(b.dataset.page)));
 
 document.addEventListener('click',e=>{
@@ -1285,13 +1301,14 @@ document.addEventListener('click',e=>{
   if(e.target.closest('.rule-add')) openRule();
   if(e.target.closest('#ruleSave')) saveRule();
   if(e.target.closest('#ruleCancel')||e.target.closest('#ruleScrim')) closeRule();
-  if(e.target.closest('.start-workout')) onStartWorkout();
+  if(e.target.closest('.record-open')) openRecordSheet();   // FAB「運動記録」→記録シート
+  if(e.target.closest('#psTimerBtn')) startRecordTimer();   // 記録シート内「⏱ タイマーで計る」
   if(e.target.closest('.stop-workout')) onStopWorkout();
   if(e.target.closest('#startGo')) onStartGo();
   if(e.target.closest('#startCancel')||e.target.closest('#startScrim')) closeStartSheet();
   if(e.target.closest('#psCameraBtn')) document.getElementById('psCamera').click();   // カメラ直接起動
   if(e.target.closest('#psAlbumBtn')) document.getElementById('psAlbum').click();      // アルバム選択
-  if(e.target.closest('#postSubmit')) submitPost();
+  if(e.target.closest('#postSubmit')) submitRecord();
   if(e.target.closest('#postCancel')||e.target.closest('#postScrim')) closePostSheet();
   const day=e.target.closest('.day-pill');
   if(day){ selectedDate=day.dataset.date; renderWeek(); renderDayList(); }
@@ -1354,7 +1371,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('input', e=>{ if(e.target.closest('#profileSheet')) updateProfilePreview(); });
 document.addEventListener('change', e=>{ if(e.target.id==='psCamera'||e.target.id==='psAlbum') handlePhoto(e.target.files && e.target.files[0]); });
 // タブ復帰時にタイマー表示を即補正(バックグラウンド中のsetInterval間引きを吸収・経過はstarted_at基準)
-document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && timerRunning) updateTimerDisp(); });
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ if(timerRunning) updateTimerDisp(); refreshConnected(); } });
 // 「＋その他」インライン入力: Enter=追加 / Esc=閉じる
 document.addEventListener('keydown', e=>{
   const inp=e.target; if(!inp.classList || !inp.classList.contains('tag-input')) return;
@@ -1398,7 +1415,6 @@ async function initApp(session){
   renderFeedAvatars(); renderFeed(); renderWeek(); renderDayList(); renderGroup();
   renderMeal(); renderLimits(); renderMonth(); renderMaintCaption(); renderStartBar(); renderStats();
   renderIdentity();
-  restoreActiveTimer();   // 未終了の運動があれば「トレーニング中(◯分経過)」を復元(started_at基準)
   showPage('schedule');   // app opens on 予定 (also reveals the 運動開始 bar)
   // 初回のみ自動表示。既にデータがある既存ユーザーには突然出さない(手動再表示は設定/🔔から)
   const hasData = logEntries.length>0 || posts.length>0 || limits.length>0;

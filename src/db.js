@@ -197,6 +197,13 @@ export async function loadAll(){
   };
 }
 
+// タイムライン(posts)だけ再取得(ポーリング/プル更新用)。RLSが is_connected(owner) を担保=1本TL。
+export async function loadPosts(){
+  const { data, error } = await supabase.from('posts').select('*').order('created_at', { ascending: false });
+  if(error){ console.error('loadPosts failed:', error.message || error); return null; }
+  return (data || []).map(mapPost);
+}
+
 // つながり相手の運動だけ(指定期間)。安全な列のみ・RLSが type=workout & is_connected を担保。
 // 体重/食事は列にもRLSにも乗らない=生体重は絶対に返らない。
 export async function loadConnectedWorkouts(fromDate, toDate){

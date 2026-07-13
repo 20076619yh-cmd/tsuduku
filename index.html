@@ -468,17 +468,21 @@
     <button id="startGo" class="pop w-full bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">この内容で開始</button>
   </div>
 
-  <!-- post sheet (opens after timer stop) -->
+  <!-- 運動記録シート(後入れ: 部位・実施時間任意・写真・ひとこと → 記録する でdone化＋投稿) -->
   <div id="postScrim" class="sheet-scrim absolute inset-0 z-40 hidden"></div>
   <div id="postSheet" class="sheet absolute inset-x-0 bottom-0 z-50 bg-card rounded-t-[24px] border-t border-line px-5 pt-3 pb-7">
     <div class="w-10 h-1 rounded-full bg-line mx-auto mb-4"></div>
     <div class="flex items-center justify-between mb-4">
-      <p class="text-[16px] font-extrabold text-ink">実施を記録</p>
+      <p class="text-[16px] font-extrabold text-ink">運動を記録</p>
       <button id="postCancel" class="pop text-[12px] font-bold text-sub">閉じる</button>
     </div>
-    <div class="flex items-center justify-between rounded-2xl bg-bg border border-line px-4 py-3 mb-4">
-      <div id="psTags" class="flex flex-wrap gap-1.5"></div>
-      <span id="psDur" class="text-[12px] font-bold text-sub shrink-0 ml-2"></span>
+    <label class="block text-[11px] font-bold text-faint mb-1.5">部位（任意）</label>
+    <div id="psTags" class="flex flex-wrap gap-2 mb-4"></div>
+    <label class="block text-[11px] font-bold text-faint mb-1.5">実施時間（任意）</label>
+    <div class="flex items-center gap-2 mb-4">
+      <input id="psDurMin" type="number" inputmode="numeric" min="1" placeholder="分" class="w-24 bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink">
+      <span class="text-[12px] font-bold text-faint">分</span>
+      <button id="psTimerBtn" class="pop ml-auto text-[13px] font-bold text-accent border border-aline bg-asoft rounded-2xl px-4 py-2.5">⏱ タイマーで計る</button>
     </div>
     <label class="block text-[11px] font-bold text-faint mb-1.5">写真（任意）</label>
     <div class="grid grid-cols-2 gap-2">
@@ -490,7 +494,7 @@
     <div id="psPhotoPreview"></div>
     <label class="block text-[11px] font-bold text-faint mb-1.5 mt-4">コメント（任意）</label>
     <textarea id="psText" rows="3" placeholder="ひとことどうぞ（任意）" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink resize-none"></textarea>
-    <button id="postSubmit" class="pop w-full mt-3 bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">投稿する</button>
+    <button id="postSubmit" class="pop w-full mt-3 bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">記録する</button>
   </div>
 
 </div>
