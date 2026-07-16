@@ -236,7 +236,7 @@ export async function removeReaction(postId, kind){
 function mapEntry(x){
   return { id:x.id, who:x.owner, type:x.type, date:x.entry_date,
     tags:x.tags || [], time:x.time_label, durSec:x.dur_sec, dur:durLabel(x.dur_sec),
-    status:x.status, kg:x.kg, kcal:x.kcal, startedAt:x.started_at };
+    status:x.status, kg:x.kg, kcal:x.kcal, satiety:x.satiety, startedAt:x.started_at };
 }
 function mapPost(x){
   return { id:x.id, who:x.owner, kind:x.kind, tags:x.tags || [], durSec:x.dur_sec, dur:durLabel(x.dur_sec),
@@ -258,7 +258,7 @@ function entryToRow(e){
     type: e.type, entry_date: e.date,
     tags: e.tags || [], time_label: e.time ?? null,
     dur_sec: e.durSec ?? null, status: e.status ?? null,
-    kg: e.kg ?? null, kcal: e.kcal ?? null,
+    kg: e.kg ?? null, kcal: e.kcal ?? null, satiety: e.satiety ?? null,   // satiety=満腹度(腹何分目 0〜10・meal行のみ・本人のみ)
     started_at: e.startedAt ?? null,   // タイマー開始時刻(仲間の🏃トレ中判定・①通知の起点)
   };
 }
