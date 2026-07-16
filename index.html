@@ -123,14 +123,7 @@
       <!-- compact body-weight handle (edit/add); weight is displayed on 記録 -->
       <div id="dayWeightRow" class="mt-3"></div>
 
-      <!-- today's meal input (intake feeds the 記録 calorie-balance graph). TODAY選択時のみ表示 -->
-      <div id="mealCard" class="rounded-2xl bg-card border border-line shadow-card p-4 mt-5">
-        <div class="flex items-center justify-between mb-3">
-          <p id="mealLabel" class="text-[13px] font-extrabold text-ink">本日の食事</p>
-          <button class="meal-add pop text-[11px] font-bold text-accent">＋ 入力</button>
-        </div>
-        <div id="mealSummary"></div>
-      </div>
+      <!-- 食事入力は削除(運動軸に全振り・CLAUDE.md「食事入力を削除した理由」参照)。satiety/meal データはDB残置 -->
 
       <!-- self rules (limits): 日数ストリーク型。per-item privacy + 各ルールに🔥N日目(自己ベスト併記) -->
       <div class="rounded-2xl bg-card border border-line shadow-card p-4 mt-5">
@@ -156,6 +149,9 @@
 
       <!-- YOU first: clean big numbers -->
       <div class="rounded-2xl bg-card border border-line shadow-card p-5 mb-3">
+      <!-- fit tree: 運動の消費カロリー貯金で木が育つ。数字は本人のみ(通帳)・木の姿だけ将来共有(庭) -->
+      <div id="treeCard" class="rounded-2xl bg-card border border-line shadow-card p-5 mb-3"></div>
+
         <div class="flex items-center gap-2.5 mb-4">
           <div id="heroAvatar" class="avatar-btn cursor-pointer w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[13px]" style="background:#14B87C">ボ</div>
           <p id="heroName" class="text-[13px] font-bold text-sub">ぼーいの今週</p>
@@ -181,26 +177,20 @@
             <p class="text-[15px] font-extrabold text-ink leading-none" id="heroTime">—</p>
           </div>
           <div class="text-center px-1">
-            <p class="text-[10px] text-faint font-bold mb-1">カロリー差分</p>
-            <p class="text-[15px] font-extrabold text-accent leading-none" id="heroMaint">—</p>
+            <p class="text-[10px] text-faint font-bold mb-1">今週の消費</p>
+            <p class="text-[15px] font-extrabold text-accent leading-none" id="heroBurn">—</p>
           </div>
         </div>
       </div>
 
-      <!-- weight + calorie balance (linked, no-shame) -->
+      <!-- weight (no-shame). カロリー収支は廃止(食事入力削除)。カロリーは消費貯金=treeCardへ -->
       <div class="rounded-2xl bg-card border border-line shadow-card p-4 mb-3">
         <div class="flex items-center justify-between mb-2">
-          <p class="text-[13px] font-extrabold text-ink">体重とカロリー収支</p>
+          <p class="text-[13px] font-extrabold text-ink">体重</p>
           <p id="weightDelta" class="text-[12px] font-bold text-accent">-0.8kg</p>
         </div>
         <div id="weightBody">
           <div class="relative h-[120px]"><canvas id="weightChart"></canvas></div>
-          <div class="flex items-center gap-3 mt-2.5 mb-1 pl-1">
-            <span class="flex items-center gap-1.5 text-[10px] text-faint font-bold"><span class="w-2 h-2 rounded-sm" style="background:#14B87C"></span>不足（締まった）</span>
-            <span class="flex items-center gap-1.5 text-[10px] text-faint font-bold"><span class="w-2 h-2 rounded-sm" style="background:#C9CEC6"></span>超過</span>
-          </div>
-          <div class="relative h-[74px]"><canvas id="balanceChart"></canvas></div>
-          <p id="maintCaption" class="text-[10px] text-faint mt-2 pl-1"></p>
         </div>
         <div id="weightEmpty" class="hidden text-center py-8">
           <p class="text-[26px]">🌱</p>
@@ -276,11 +266,6 @@
     <div id="sfWeight" class="hidden">
       <label class="block text-[11px] font-bold text-faint mb-1.5">体重 (kg)</label>
       <input id="sfKg" type="number" step="0.1" inputmode="decimal" placeholder="71.0" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-1">
-    </div>
-    <div id="sfMeal" class="hidden">
-      <label class="block text-[11px] font-bold text-faint mb-1.5">摂取カロリー (kcal)</label>
-      <input id="sfKcal" type="number" inputmode="numeric" placeholder="1850" class="w-full bg-bg border border-line rounded-xl px-3 py-2.5 text-[14px] font-bold text-ink mb-2">
-      <p class="text-[10px] text-faint mt-2">食品DB検索なし。摂取kcalをざっくり入れるだけ。記録のカロリー収支に反映（P/F/Cは毎食入力が重いため廃止）</p>
     </div>
     <button id="sheetConfirm" class="pop w-full mt-3 bg-accent text-white text-[14px] font-extrabold rounded-2xl py-3.5">決定</button>
     <button id="sheetDelete" class="hidden pop w-full mt-2 text-[13px] font-bold text-sub border border-line rounded-2xl py-3">このエントリを削除</button>

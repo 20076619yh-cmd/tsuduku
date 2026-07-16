@@ -719,25 +719,7 @@ function deleteEntry(){
   rerenderAfterChange();
 }
 
-/* ---------- SCHEDULE: 本日の食事 / limits (type-tagged items) ---------- */
-// meal input lives in 予定; intake feeds the 記録 calorie-balance graph (週). 食品DB検索なし
-function renderMeal(){
-  const el=document.getElementById('mealSummary'); if(!el) return;
-  const card=document.getElementById('mealCard');
-  // 本日カードは選択日=TODAYのときだけ表示。過去/未来日を選んでいる間はカードごと非表示
-  // (その日の食事は選択日リストの mealRow で見る/直す)。
-  if(selectedDate!==TODAY){ if(card) card.classList.add('hidden'); return; }
-  if(card) card.classList.remove('hidden');
-  const meal=logEntries.find(e=>e.type==='meal'&&e.who===CURRENT_USER&&e.date===TODAY);
-  if(!meal){
-    el.innerHTML=`<button class="meal-add pop w-full flex items-center justify-center gap-1.5 text-[12px] font-bold text-accent bg-card border border-dashed border-aline rounded-2xl py-3">＋ 食事を入力（摂取kcal）</button>`;
-    return;
-  }
-  el.innerHTML=`<button class="entry-edit pop w-full text-left" data-id="${meal.id}"><div class="flex items-baseline px-1">
-    <p class="text-[11px] text-faint font-bold">摂取</p>
-    <p class="text-[16px] font-extrabold text-ink leading-none ml-auto">${meal.kcal}<span class="text-[10px] text-faint font-bold ml-0.5">kcal</span></p>
-  </div></button>`;
-}
+/* 食事入力(満腹度ゲージ/kcal)は削除。運動軸に全振り(CLAUDE.md「食事入力を削除した理由」)。satiety/mealデータはDB残置。次は運動記録から消費kcalを貯金として積む。 */
 // compact tappable 本日の体重 handle in 予定 (edit/add). Weight lives on 記録; this is just the edit handle.
 function renderDayWeight(){
   const el=document.getElementById('dayWeightRow'); if(!el) return;
@@ -863,21 +845,7 @@ function initCharts(){
       x:{grid:{display:false},border:{display:false},ticks:{display:false}} }, maintainAspectRatio:false }
   });
 
-  // bottom panel: calorie balance bars (deficit=teal, surplus=neutral grey — no shame)
-  charts.balance = new Chart(document.getElementById('balanceChart'), {
-    type:'bar',
-    data:{ labels:chartLabels.week, datasets:[{ data:[],
-      backgroundColor:(c)=> (c.raw<=0 ? '#14B87C' : '#C9CEC6'),
-      borderRadius:4, barThickness:14 }]},
-    options:{ plugins:{legend:{display:false},tooltip:{enabled:false}}, scales:{
-      y:{ min:-600, max:600,
-          // fixed gridlines at -500/-250/0/250/500 (no auto-scaling); deficit side labeled, surplus hidden
-          afterBuildTicks:(s)=>{ s.ticks=[-500,-250,0,250,500].map(value=>({value})); },
-          grid:{ color:(ctx)=> ctx.tick.value>0 ? 'rgba(0,0,0,0)' : (ctx.tick.value===0 ? '#CDCFC9' : '#EDECE8') }, border:{display:false},
-          ticks:{ font:{size:9}, color:'#A2A69F', callback:(v)=> v<0 ? String(-v) : '' },
-          afterFit:(s)=>{s.width=36;} },
-      x:{grid:{display:false},border:{display:false},ticks:{font:{size:11}}} }, maintainAspectRatio:false }
-  });
+  // カロリー収支チャートは廃止(食事入力削除)。カロリーは消費貯金=treeCardへ。
 
   charts.days = new Chart(document.getElementById('daysChart'), {
     type:'bar',
@@ -894,13 +862,12 @@ function initCharts(){
 // refresh charts + their no-shame empty states from current data
 function updateWeight(mode){
   if(!charts.weight) return;
-  const wser=weightSeries(mode), bser=balSeries(mode);
-  const hasWB = wser.some(x=>x!=null) || bser.some(x=>x!=null);
+  const wser=weightSeries(mode);
+  const hasWB = wser.some(x=>x!=null);
   document.getElementById('weightBody').classList.toggle('hidden', !hasWB);
   document.getElementById('weightEmpty').classList.toggle('hidden', hasWB);
   if(hasWB){
     charts.weight.data.labels=chartLabels[mode];   charts.weight.data.datasets[0].data=wser;   charts.weight.update();
-    charts.balance.data.labels=chartLabels[mode];  charts.balance.data.datasets[0].data=bser;  charts.balance.update();
   }
   document.getElementById('weightDelta').textContent = seriesDelta(wser)||'—';
 
@@ -953,9 +920,101 @@ function renderProgressHero(){
   const del=document.getElementById('heroWeightDelta');
   if(del){ const d=weightDelta(cutoff); del.textContent=d; del.classList.toggle('text-accent', d.startsWith('▼')); del.classList.toggle('text-faint', !d.startsWith('▼')); }
   const ht=document.getElementById('heroTime'); if(ht) ht.innerHTML=fmtMinHtml(doneWk.reduce((s,e)=>s+durToMin(e.dur),0));
-  const bser=weekBalSeries().filter(x=>x!=null);   // カロリー差分は現状維持(週ベース)
-  if(bser.length){ const sum=bser.reduce((a,b)=>a+b,0); set('heroMaint', (sum<=0?'-':'+')+Math.abs(sum/1000).toFixed(1)+'k'); }
-  else set('heroMaint','—');
+  // 今週の消費kcal(月ビュー時は今月)。数字は本人のみ=通帳(CLAUDE.md 推論プライバシー)
+  const burn = month ? burnMonth() : burnWeek();
+  set('heroBurn', burn>0 ? burn.toLocaleString() : '—');
+  renderTree();
+}
+
+/* ---------- fit tree: 消費カロリー貯金 → 木の育成 (Phase 1・自分のみ・SQL不要) ----------
+   消費kcal = METs × 体重kg × 時間h × 1.05。数字は本人のみ(体重逆算防止=CLAUDE.md「推論プライバシー」)。
+   部位タグ→METs。複数タグは平均。カスタムはキーワード一致→既定4.0。休養は対象外。 */
+const MET_MAP = { '胸トレ':5.0,'背中':5.0,'脚':5.0,'肩':5.0,'腕':5.0,'有酸素':8.0,'ストレッチ':2.5 };
+const MET_DEFAULT = 4.0;   // 部位なし「運動」/ 未知のカスタム部位
+const MET_KEYWORDS = [ [/ヨガ|よが|yoga/i,2.5],[/ストレッチ/,2.5],[/ウォーク|ウォーキング|散歩|walk/i,3.5],[/ラン|ランニング|ジョグ|ジョギング|run|jog/i,8.0] ];
+function metsForTag(tag){
+  if(MET_MAP[tag]!=null) return MET_MAP[tag];
+  for(const [re,v] of MET_KEYWORDS){ if(re.test(tag)) return v; }
+  return MET_DEFAULT;
+}
+function metsForEntry(e){
+  const tags=(e.tags||[]).filter(Boolean);
+  if(!tags.length) return MET_DEFAULT;
+  return tags.reduce((s,t)=>s+metsForTag(t),0)/tags.length;   // 複数部位は平均
+}
+// entry日付に最も近い体重(その日以前の最新→無ければ最古)。1件も無ければ null=計算スキップ。
+function weightForDate(date){
+  const ws=logEntries.filter(e=>e.type==='weight'&&e.who===CURRENT_USER&&e.kg!=null).slice().sort((a,b)=> a.date<b.date?-1:1);
+  if(!ws.length) return null;
+  const before=ws.filter(e=>e.date<=date);
+  return before.length ? before[before.length-1].kg : ws[0].kg;
+}
+// 1件の消費kcal(done運動のみ・時間と体重があるときだけ・無ければ0=捏造しない)。
+function burnForEntry(e){
+  if(e.type!=='workout'||e.status!=='done') return 0;
+  const min=durToMin(e.dur); if(!min) return 0;             // 時間未入力=スキップ(回数だけ)
+  const kg=weightForDate(e.date); if(kg==null) return 0;    // 体重未入力=スキップ
+  return Math.round(metsForEntry(e) * kg * (min/60) * 1.05);
+}
+function burnInPeriod(pred){ return logEntries.filter(e=>e.who===CURRENT_USER&&pred(e.date)).reduce((s,e)=>s+burnForEntry(e),0); }
+function burnTotal(){ return burnInPeriod(()=>true); }                                   // 累計(遡り=初期残高)
+function burnWeek(){ return burnInPeriod(d=> week.some(w=>w.date===d)); }
+function burnMonth(){ const {y,m}=parseYmd(TODAY); return burnInPeriod(d=>{ const p=parseYmd(d); return p.y===y&&p.m===m; }); }
+function hasAnyWeight(){ return logEntries.some(e=>e.type==='weight'&&e.who===CURRENT_USER&&e.kg!=null); }
+
+// 成長段階の閾値(累計消費kcal)。★ハードコード集約=将来実データで調整する前提★
+const TREE_STAGES = [
+  { min:0,     label:'種',   emoji:'🌰' },
+  { min:300,   label:'芽',   emoji:'🌱' },
+  { min:1500,  label:'若葉', emoji:'🌿' },
+  { min:4000,  label:'苗木', emoji:'🪴' },
+  { min:9000,  label:'若木', emoji:'🌲' },
+  { min:20000, label:'成木', emoji:null },   // null=種類ごとの絵文字(mature)を使う
+  { min:40000, label:'開花', emoji:null },   // 種類ごとの開花/結実(bloom)を使う
+];
+// 植物の種類(絵文字ベース)。ランダム抽選→users.settings に永続。種を選べる機能は将来のプレミアム候補(TODO)。
+const TREE_SPECIES = [
+  { key:'sakura', name:'さくら',   mature:'🌳', bloom:'🌸' },
+  { key:'momiji', name:'もみじ',   mature:'🌳', bloom:'🍁' },
+  { key:'mikan',  name:'みかん',   mature:'🌳', bloom:'🍊' },
+  { key:'ringo',  name:'りんご',   mature:'🌳', bloom:'🍎' },
+  { key:'matsu',  name:'まつ',     mature:'🌲', bloom:'🌲' },
+  { key:'yashi',  name:'やし',     mature:'🌴', bloom:'🥥' },
+  { key:'olive',  name:'オリーブ', mature:'🌳', bloom:'🫒' },
+];
+function treeSpecies(){
+  let sp=TREE_SPECIES.find(s=>s.key===(profile.settings&&profile.settings.treeSpecies));
+  if(!sp){ sp=TREE_SPECIES[Math.floor(Math.random()*TREE_SPECIES.length)];   // 初回のみ抽選→固定
+    profile.settings={ ...(profile.settings||{}), treeSpecies:sp.key };
+    saveSettings(CURRENT_USER, profile.settings);
+  }
+  return sp;
+}
+function treeStage(total){ let i=0; TREE_STAGES.forEach((s,k)=>{ if(total>=s.min) i=k; }); return { ...TREE_STAGES[i], idx:i }; }
+function treeEmoji(stage, sp){ return stage.emoji || (stage.label==='開花'?sp.bloom:sp.mature); }
+function renderTree(){
+  const el=document.getElementById('treeCard'); if(!el) return;
+  const total=burnTotal(), sp=treeSpecies(), stage=treeStage(total), emoji=treeEmoji(stage,sp);
+  const nextMin = stage.idx+1<TREE_STAGES.length ? TREE_STAGES[stage.idx+1].min : null;
+  const foot = !hasAnyWeight()
+    ? `<p class="text-[11px] text-accent font-bold mt-2">🚿 体重を入れると水やりできる（消費カロリーが計算されます）</p>`
+    : (nextMin!=null
+        ? `<p class="text-[10px] text-faint font-bold mt-2">次の段階まで あと ${(nextMin-total).toLocaleString()} kcal</p>`
+        : `<p class="text-[10px] text-accent font-bold mt-2">🌟 最後まで育ちました</p>`);
+  el.innerHTML=`
+    <div class="flex items-center gap-4">
+      <div class="text-[52px] leading-none select-none">${emoji}</div>
+      <div class="flex-1 min-w-0">
+        <p class="text-[13px] font-extrabold text-ink">${sp.name}の木・${stage.label}</p>
+        <p class="text-[11px] text-faint font-bold mt-0.5">累計消費 <span class="text-accent font-extrabold text-[13px]">${total.toLocaleString()}</span> kcal</p>
+        <div class="flex gap-4 mt-1">
+          <p class="text-[10px] text-faint font-bold">今週 <span class="text-ink font-extrabold">${burnWeek().toLocaleString()}</span></p>
+          <p class="text-[10px] text-faint font-bold">今月 <span class="text-ink font-extrabold">${burnMonth().toLocaleString()}</span></p>
+        </div>
+        ${foot}
+      </div>
+    </div>
+    <p class="text-[9px] text-faint mt-3">※消費カロリーはMETsからの概算です。この数字はあなただけに表示されます。</p>`;
 }
 
 /* ---------- profile + maintenance (Katch-McArdle, mock — no auth/persistence) ---------- */
