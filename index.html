@@ -53,7 +53,9 @@
     </div>
   </header>
 
-  <main class="phone-scroll flex-1 overflow-y-auto px-5 pb-28">
+  <main class="phone-scroll overscroll-contain flex-1 overflow-y-auto px-5 pb-28">
+    <!-- pull-to-refresh indicator (下に引っ張ると表示・離して更新) -->
+    <div id="ptrIndicator" class="flex items-center justify-center text-[11px] font-bold text-accent overflow-hidden" style="height:0;opacity:0;transition:opacity .18s;"></div>
 
     <!-- ============ FEED ============ -->
     <section id="feed" class="page">
@@ -147,11 +149,11 @@
         </div>
       </div>
 
-      <!-- YOU first: clean big numbers -->
-      <div class="rounded-2xl bg-card border border-line shadow-card p-5 mb-3">
       <!-- fit tree: 運動の消費カロリー貯金で木が育つ。数字は本人のみ(通帳)・木の姿だけ将来共有(庭) -->
       <div id="treeCard" class="rounded-2xl bg-card border border-line shadow-card p-5 mb-3"></div>
 
+      <!-- YOU first: clean big numbers -->
+      <div class="rounded-2xl bg-card border border-line shadow-card p-5 mb-3">
         <div class="flex items-center gap-2.5 mb-4">
           <div id="heroAvatar" class="avatar-btn cursor-pointer w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[13px]" style="background:#14B87C">ボ</div>
           <p id="heroName" class="text-[13px] font-bold text-sub">ぼーいの今週</p>

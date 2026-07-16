@@ -1270,29 +1270,37 @@ function showPage(id){
   document.querySelector('main').scrollTop=0;
   document.getElementById('startBar').classList.toggle('hidden', id!=='schedule');
   if(id==='progress') setTimeout(initCharts,60);
-  if(id==='schedule'||id==='feed') refreshConnected();   // 画面に入った瞬間に最新化(near-live)
+  if(id==='schedule'||id==='feed') refreshConnected({forceFeed:true});   // 画面に入った瞬間に最新化(明示=即描画)
 }
 // フィードを見ているか(スクロール保護のため・見ている時は再構築しない)
 function feedIsActive(){ const f=document.getElementById('feed'); return !!(f && f.classList.contains('active')); }
 // A/B/C共通の土台。つながり相手の運動(connectedWork)＋リアクション＋投稿を再取得して再描画。
 // 使うのは既存のRLS実証済みロードのみ=新しい漏洩経路なし(体重/食事は取得列にもRLSにも乗らない)。
-let refreshing=false;
-async function refreshConnected(){
-  if(refreshing || CURRENT_USER==='boy') return; refreshing=true;
+let refreshing=false, lastRefresh=0;
+// opts.forceFeed=true(タブ入場・プル更新)は必ずフィード再描画。背面更新は「上部にいる時だけ」再描画=
+// スクロール中に飛ばさない。フィード非表示なら常に再描画。→「タイムラインを開いても新着が出ない」の根治。
+async function refreshConnected(opts={}){
+  if(refreshing || CURRENT_USER==='boy') return; refreshing=true; lastRefresh=Date.now();
   try{
     const wk=buildWeek(TODAY);
     const [cw, rx, ps]=await Promise.all([ loadConnectedWorkouts(wk[0].date, wk[6].date), loadReactions(), loadPosts() ]);
     connectedWork=cw; reactionRows=rx;
+    const prevIds = posts.map(p=>p.id).join(',');
     if(ps){ posts.length=0; posts.push(...ps); }
+    const changed = !!ps && posts.map(p=>p.id).join(',')!==prevIds;
     connectedWork.forEach(e=>{ if(e.who && !members[e.who]) members[e.who]={ name:'メンバー', ini:'?', c:'#9AA09A', photo:null }; });
     posts.forEach(p=>{ if(p.who && !members[p.who]) members[p.who]={ name:'メンバー', ini:'?', c:'#9AA09A', photo:null }; });
     renderDayList(); renderGroup();
-    if(!feedIsActive()) renderFeed();   // フィード非表示時のみ再構築=スクロールが飛ばない(見ている時はプル更新で)
+    const main=document.querySelector('main');
+    const nearTop = !main || main.scrollTop < 80;
+    if(opts.forceFeed || !feedIsActive() || (changed && nearTop)) renderFeed();   // 見ている最中でも上部なら反映
   }catch(err){ console.error('refreshConnected failed:', err.message || err); }
   finally{ refreshing=false; }
 }
-// 30秒ごと自動更新(見ている間だけ・背面では叩かない=バッテリー配慮)
-// (30秒自動更新は廃止=ライブ感不要。開いた時・タブ復帰時・プル更新で最新化する)
+// 復帰/ポーリングからの更新はデバウンス(直近8秒以内は叩かない=多重発火/バッテリー配慮)。
+// 明示更新(タブ入場・プル)は forceFeed で即時・デバウンス対象外。
+function refreshIfStale(){ if(Date.now()-lastRefresh > 8000) refreshConnected(); }
+function onSyncPage(){ return ['schedule','feed'].some(id=>{ const el=document.getElementById(id); return el && el.classList.contains('active'); }); }
 document.querySelectorAll('.nav-btn').forEach(b=> b.addEventListener('click',()=>showPage(b.dataset.page)));
 
 document.addEventListener('click',e=>{
@@ -1403,8 +1411,40 @@ document.addEventListener('click',e=>{
 // live maintenance preview while editing the profile sheet
 document.addEventListener('input', e=>{ if(e.target.closest('#profileSheet')) updateProfilePreview(); });
 document.addEventListener('change', e=>{ if(e.target.id==='psCamera'||e.target.id==='psAlbum') handlePhoto(e.target.files && e.target.files[0]); });
-// タブ復帰時にタイマー表示を即補正(バックグラウンド中のsetInterval間引きを吸収・経過はstarted_at基準)
-document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ if(timerRunning) updateTimerDisp(); refreshConnected(); } });
+// 復帰検知の強化: モバイルでは visibilitychange 単独だと復帰時に発火しないことがある
+// (iOS Safariのアプリ切替/ホーム復帰/bfcache復元)。pageshow・focus・online も併用しデバウンスで束ねる。
+// タイマー表示も復帰時に即補正(バックグラウンドのsetInterval間引きを吸収・経過はstarted_at基準)。
+function onResume(){ if(document.hidden) return; if(timerRunning) updateTimerDisp(); refreshIfStale(); }
+document.addEventListener('visibilitychange', onResume);
+window.addEventListener('pageshow', onResume);
+window.addEventListener('focus', onResume);
+window.addEventListener('online', onResume);
+// 緩いポーリング(90秒): ライブ感でなく「開いている画面が古すぎない」保険。表示中かつ同期対象ページのみ・背面は叩かない。
+setInterval(()=>{ if(!document.hidden && onSyncPage()) refreshIfStale(); }, 90000);
+// プル・トゥ・リフレッシュ(Instagram式): main を最上部で下に引っ張ると明示更新。同期ページのみ。
+(function initPullToRefresh(){
+  const main=document.querySelector('main'); if(!main) return;
+  const ind=document.getElementById('ptrIndicator');
+  const THRESH=70; let startY=0, pulling=false, ready=false;
+  const reset=()=>{ if(ind){ ind.style.height='0px'; ind.style.opacity='0'; } };
+  main.addEventListener('touchstart',e=>{
+    if(main.scrollTop>0 || !onSyncPage()){ pulling=false; return; }
+    startY=e.touches[0].clientY; pulling=true; ready=false;
+  },{passive:true});
+  main.addEventListener('touchmove',e=>{
+    if(!pulling) return;
+    const dy=e.touches[0].clientY-startY;
+    if(dy<=0){ reset(); ready=false; return; }
+    const pull=Math.min(dy*0.5, 90);
+    if(ind){ ind.style.height=pull+'px'; ind.style.opacity=String(Math.min(pull/THRESH,1)); ind.textContent = pull>=THRESH?'離して更新':'引っ張って更新'; }
+    ready = pull>=THRESH;
+  },{passive:true});
+  main.addEventListener('touchend',()=>{
+    if(!pulling) return; pulling=false;
+    if(ready){ if(ind){ ind.textContent='更新中…'; } refreshConnected({forceFeed:true}).finally(reset); }
+    else reset();
+  });
+})();
 // 「＋その他」インライン入力: Enter=追加 / Esc=閉じる
 document.addEventListener('keydown', e=>{
   const inp=e.target; if(!inp.classList || !inp.classList.contains('tag-input')) return;
