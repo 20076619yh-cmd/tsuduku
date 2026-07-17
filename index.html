@@ -372,7 +372,13 @@
       <button id="membersClose" class="pop text-[12px] font-bold text-sub">閉じる</button>
     </div>
     <div id="membersList" class="space-y-2"></div>
-    <button id="membersInvite" class="pop w-full mt-4 text-[13px] font-bold text-accent border border-aline bg-asoft rounded-2xl py-3">＋ メンバーを招待</button>
+    <button id="membersInvite" class="pop w-full mt-4 text-[13px] font-bold text-accent border border-aline bg-asoft rounded-2xl py-3">＋ メンバーを招待（コードを発行）</button>
+    <!-- インライン発行された招待コード(設定へ飛ばずここで完結) -->
+    <div id="mInviteBox" class="hidden bg-asoft border border-aline rounded-2xl px-4 py-3 mt-2">
+      <p class="text-[10px] text-faint font-bold">招待コード（24時間有効・人数制限なし）</p>
+      <p id="mInviteCode" class="text-[22px] font-extrabold text-ink tracking-[0.12em] select-all break-all leading-tight my-1"></p>
+      <button id="mCopyInvite" class="pop text-[11px] font-bold text-accent mt-1">コピー</button>
+    </div>
   </div>
 
   <!-- メンバー排除/離脱の確認(ノーシェイム・軽い2択)。membersSheetより前面 -->

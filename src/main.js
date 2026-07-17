@@ -1181,22 +1181,25 @@ function openNotify(){ closeAllSheets('notifySheet'); document.getElementById('n
 function closeNotify(){ document.getElementById('notifySheet').classList.remove('open'); document.getElementById('notifyScrim').classList.add('hidden'); }
 function openSettings(){ closeAllSheets('settingsSheet'); document.getElementById('settingsScrim').classList.remove('hidden'); document.getElementById('settingsSheet').classList.add('open'); }
 function closeSettings(){ document.getElementById('settingsSheet').classList.remove('open'); document.getElementById('settingsScrim').classList.add('hidden'); }
-// つながる(グループ招待): コード発行/コピー/参加。参加成功で再ロードしてタイムラインに反映。
+// つながる(グループ招待): コード発行/コピー/参加。設定とメンバーシートの両方でインライン発行できる(scopeで表示先を切替)。
 let lastInviteCode=null;
-async function onGenInvite(){
+const INVITE_BOX={ settings:{code:'inviteCode', box:'inviteCodeBox'}, members:{code:'mInviteCode', box:'mInviteBox'} };
+async function onGenInvite(scope='settings'){
+  const t=INVITE_BOX[scope]||INVITE_BOX.settings;
   const inv=await createInvite(SPACE_ID);
   const code = inv && inv.code;
   if(!code){ console.error('invite: コードを取り出せません', inv); showToast('招待コードの発行に失敗しました。通信を確認してください'); return; }
   lastInviteCode=code;
-  document.getElementById('inviteCode').textContent=code;
-  document.getElementById('inviteCodeBox').classList.remove('hidden');
+  document.getElementById(t.code).textContent=code;
+  document.getElementById(t.box).classList.remove('hidden');
 }
-async function onCopyInvite(){
+async function onCopyInvite(scope='settings'){
   if(!lastInviteCode) return;
   try{ await navigator.clipboard.writeText(lastInviteCode); showToast('コピーしました'); }
   catch(err){
     // clipboard API不可(古い環境/権限)時はコード文字列を選択状態にして手動コピーを促す
-    const el=document.getElementById('inviteCode');
+    const t=INVITE_BOX[scope]||INVITE_BOX.settings;
+    const el=document.getElementById(t.code);
     if(el){ const r=document.createRange(); r.selectNodeContents(el); const s=window.getSelection(); s.removeAllRanges(); s.addRange(r); }
     showToast('コードを選択しました。長押しでコピーしてください');
   }
@@ -1415,7 +1418,8 @@ document.addEventListener('click',e=>{
   // メンバー一覧 / 通知ベル / 設定 / ツアー
   if(e.target.closest('#membersBtn')) openMembers();
   if(e.target.closest('#membersClose')||e.target.closest('#membersScrim')) closeMembers();
-  if(e.target.closest('#membersInvite')){ closeMembers(); openSettings(); }
+  if(e.target.closest('#membersInvite')) onGenInvite('members');   // メンバーシート内でインライン発行(遷移しない)
+  if(e.target.closest('#mCopyInvite')) onCopyInvite('members');
   { const mr=e.target.closest('.member-remove'); if(mr) openMemberRemove(mr.dataset.user, mr.dataset.space); }
   if(e.target.closest('.group-leave')) openGroupLeave();
   if(e.target.closest('#memberActConfirm')) confirmMemberAct();
@@ -1428,8 +1432,8 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#settingsTour')){ closeSettings(); openTour(); }
   if(e.target.closest('#settingsLogout')){ closeSettings(); supabase.auth.signOut(); }
   if(e.target.closest('.open-connect')) openSettings();   // 新規ログイン後の参加入口→設定「つながる」欄へ
-  if(e.target.closest('#genInvite')) onGenInvite();
-  if(e.target.closest('#copyInvite')) onCopyInvite();
+  if(e.target.closest('#genInvite')) onGenInvite('settings');
+  if(e.target.closest('#copyInvite')) onCopyInvite('settings');
   if(e.target.closest('#joinBtn')) onJoin();
   // #tourNext/#tourSkip はツアー中のみ存在し、上部のガードで処理する
 });
