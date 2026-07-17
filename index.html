@@ -405,9 +405,12 @@
       <div id="pcAvatar" class="w-16 h-16 rounded-full flex items-center justify-center text-white font-extrabold text-[24px]" style="background:#14B87C"></div>
       <p id="pcName" class="text-[15px] font-extrabold text-ink mt-2"></p>
     </div>
-    <p class="text-[11px] font-bold text-faint mb-2">公開中の自分ルール</p>
+    <!-- 自分を開いた時だけ: マイページのサマリー(木/連続/つながり/グループ) -->
+    <div id="pcSummary" class="hidden mb-4"></div>
+    <p id="pcRulesHead" class="text-[11px] font-bold text-faint mb-2">公開中の自分ルール</p>
     <div id="pcRules" class="space-y-2"></div>
-    <button id="pcClose" class="pop w-full mt-4 text-[13px] font-bold text-sub border border-line rounded-2xl py-3">閉じる</button>
+    <button id="pcEdit" class="hidden pop w-full mt-4 text-[13px] font-bold text-accent border border-aline bg-asoft rounded-2xl py-3">プロフィールを編集</button>
+    <button id="pcClose" class="pop w-full mt-2 text-[13px] font-bold text-sub border border-line rounded-2xl py-3">閉じる</button>
   </div>
 
   <!-- 保存失敗トースト(自動で消える・ノーシェイム) -->

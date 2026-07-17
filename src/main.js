@@ -1070,20 +1070,43 @@ function closeProfile(){
 function pcRuleRow(l){
   return `<div class="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2"><span class="text-[14px]">${l.emoji||'🎯'}</span><span class="flex-1 text-[13px] font-bold text-ink truncate">${l.label}</span>${l.streakStart?`<span class="text-[11px] font-extrabold text-accent whitespace-nowrap">🔥${ruleStreak(l)}</span>`:''}</div>`;
 }
-// タップされた相手のカードを表示。自分=own limits、相手=公開ルールをその都度取得(rules RLSがpub＋つながりを担保)。
+// マイページのサマリー(自分のカードのみ): 木・連続記録・つながり人数・参加グループ数。
+// 数字は本人だけが見る=通帳(消費kcalは出さない・木の姿と回数系のみ)。◯代目(世代)はPhase 2で。
+function mySummaryHtml(){
+  const sp=treeSpecies(), stage=treeStage(burnTotal()), emoji=treeEmoji(stage,sp);
+  const conns=Object.keys(members).filter(id=>id!==CURRENT_USER).length;
+  const groups=1 + (Array.isArray(joinedSpaceIds)?joinedSpaceIds.length:0);   // 自分のグループ＋参加中
+  const cell=(v,label)=>`<div class="text-center px-1"><p class="text-[17px] font-extrabold text-ink leading-none">${v}</p><p class="text-[10px] text-faint font-bold mt-1">${label}</p></div>`;
+  return `
+    <div class="rounded-2xl bg-asoft border border-aline px-4 py-3 flex items-center gap-3 mb-3">
+      <div class="text-[34px] leading-none select-none">${emoji}</div>
+      <div class="min-w-0"><p class="text-[12px] font-extrabold text-ink truncate">${sp.name}の木・${stage.label}</p>
+        <p class="text-[10px] text-faint font-bold mt-0.5">運動を続けて育てよう</p></div>
+    </div>
+    <div class="grid grid-cols-3 divide-x divide-line">
+      ${cell('🔥'+curStreak(),'連続記録')}${cell(conns,'つながり')}${cell(groups,'グループ')}
+    </div>`;
+}
+// タップされた相手のカードを表示。自分=own limits＋マイページサマリー、相手=公開ルールをその都度取得(rules RLSがpub＋つながりを担保)。
 let pcFromMembers=false;
 async function openProfileCard(userId){
   pcFromMembers = document.getElementById('membersSheet').classList.contains('open');   // 復帰先の記憶
   closeAllSheets();   // 常に1枚
   const id = userId || CURRENT_USER;
+  const isSelf = id===CURRENT_USER;
   const m = members[id] || {};
   applyAvatarEl(document.getElementById('pcAvatar'), m);
   const nm=document.getElementById('pcName'); if(nm) nm.textContent=m.name||'';
+  // 自分のみ: サマリー表示＋編集ボタン。相手は非表示。
+  const sum=document.getElementById('pcSummary');
+  if(sum){ sum.classList.toggle('hidden', !isSelf); sum.innerHTML = isSelf ? mySummaryHtml() : ''; }
+  document.getElementById('pcEdit').classList.toggle('hidden', !isSelf);
+  const head=document.getElementById('pcRulesHead'); if(head) head.textContent = `${m.name||''}の自分ルール`;
   const el=document.getElementById('pcRules');
   if(el) el.innerHTML=`<p class="text-[12px] text-faint text-center py-3">…</p>`;
   document.getElementById('pcScrim').classList.remove('hidden');
   document.getElementById('pcSheet').classList.add('open');
-  const rules = id===CURRENT_USER ? limits.filter(l=>l.pub) : await loadPublicRules(id);
+  const rules = isSelf ? limits.filter(l=>l.pub) : await loadPublicRules(id);
   const pub = rules.filter(l=>l.streakStart).slice(0,3);
   if(el) el.innerHTML = pub.length
     ? pub.map(pcRuleRow).join('')
@@ -1384,7 +1407,8 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#sheetConfirm')) confirmSheet();
   if(e.target.closest('#sheetCancel')||e.target.closest('#sheetScrim')) closeSheet();
 
-  if(e.target.closest('#profileBtn')) openProfile();
+  if(e.target.closest('#profileBtn')) openProfileCard(CURRENT_USER);   // ヘッダ右上=マイページ(サマリーカード)
+  if(e.target.closest('#pcEdit')) openProfile();                       // カード内「編集」→プロフィール編集シート
   if(e.target.closest('#pfEditPhoto')) showToast('プロフィール画像の変更は近日対応します');   // 画像変更=Phase 5
   if(e.target.closest('#profileSave')) saveProfile();
   if(e.target.closest('#profileCancel')||e.target.closest('#profileScrim')) closeProfile();
