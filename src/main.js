@@ -331,16 +331,17 @@ function reactBtn(pid,kind,emo){
   const n=reactCount(pid,kind), mine=reactMine(pid,kind);
   return `<button class="react pop flex items-center gap-1.5 border px-3 py-1.5 rounded-full text-[13px] font-bold ${mine?'border-aline bg-asoft text-accent':'border-line bg-card text-sub'}" data-post="${pid}" data-k="${kind}"><span>${emo}</span><span class="cnt">${n}</span></button>`;
 }
-// 投稿カード下部に「投稿時点の公開ルール」を最大3つ併記。焼き込み済みスナップショットを描画=不変(ライブ計算しない)。
+// 投稿カード下部に「投稿時点の公開ルール」を最大3つ併記。焼き込み済みスナップショットのルール名のみを描画。
+// 🔥日数は出さない(焼き込み値=投稿時点で、プロフィールのライブ値と食い違い混乱の元。現在の連続は
+// プロフィール/自分ルールに一本化)。縦並び=長いルール名でも折り返さず読みやすい。
 // 投稿自体に載るので、つながり相手(B)の投稿にも B のルールが正しく出る(他人ルールを別途取得しない)。
 function ruleSection(p){
   const snap = p.rulesSnapshot || [];
   if(!snap.length) return '';
-  // 小見出し「継続中の自分ルール」＋上ヘアライン。他人の投稿でも「この人が続けている約束」だと分かる
   return `<div class="px-4 py-3 border-t border-line">
     <p class="text-[10px] font-bold text-faint mb-1.5">継続中の自分ルール</p>
-    <div class="flex flex-wrap gap-x-3 gap-y-1">${
-      snap.map(r=>`<span class="text-[11px] font-bold text-accent">${r.label} 🔥${r.day}</span>`).join('')
+    <div class="flex flex-col gap-1">${
+      snap.map(r=>`<span class="text-[12px] font-bold text-accent">${r.label}</span>`).join('')
     }</div>
   </div>`;
 }
