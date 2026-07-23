@@ -45,8 +45,9 @@
         <button id="membersBtn" class="pop w-8 h-8 rounded-full flex items-center justify-center text-sub">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-[18px] h-[18px]"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </button>
-        <button id="bellBtn" class="pop w-8 h-8 rounded-full flex items-center justify-center text-sub">
+        <button id="bellBtn" class="pop relative w-8 h-8 rounded-full flex items-center justify-center text-sub">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-[18px] h-[18px]"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+          <span id="bellDot" class="hidden absolute top-1 right-1 w-2 h-2 rounded-full bg-[#D9686B] ring-2 ring-white"></span>
         </button>
         <button id="profileBtn" class="profile-btn pop w-8 h-8 rounded-full flex items-center justify-center text-white text-[13px] font-bold" style="background:#14B87C">ボ</button>
       </div>
@@ -322,10 +323,7 @@
       <p class="text-[16px] font-extrabold text-ink">お知らせ</p>
       <button id="notifyClose" class="pop text-[12px] font-bold text-sub">閉じる</button>
     </div>
-    <div class="text-center py-10 rounded-2xl bg-bg border border-dashed border-line">
-      <p class="text-[26px]">🌱</p>
-      <p class="text-[13px] text-faint font-bold mt-2">お知らせはまだありません</p>
-    </div>
+    <div id="notifyList" class="max-h-[52vh] overflow-y-auto -mx-1 px-1"></div>
     <button id="notifyTour" class="pop w-full mt-3 text-[13px] font-bold text-accent border border-aline bg-asoft rounded-2xl py-3">使い方を見る</button>
   </div>
 

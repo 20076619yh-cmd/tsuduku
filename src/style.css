@@ -21,4 +21,15 @@
   .sheet{ transform:translateY(110%); transition:transform .3s cubic-bezier(.4,0,.2,1); max-height:86%; overflow-y:auto; box-shadow:0 -8px 30px rgba(24,29,26,.12); }
   .sheet.open{ transform:translateY(0); }
   .sheet-scrim{ background:rgba(24,29,26,.35); }
-  @media (prefers-reduced-motion: reduce){ .page{animation:none;} .sheet{transition:none;} }
+  /* ダブルタップの🔥ポップ(Instagram風・控えめ)。カード/コメント行に position:relative を付けて中央表示 */
+  .fire-pop{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); pointer-events:none; z-index:6; will-change:transform,opacity; animation:firePop .7s ease-out forwards; }
+  @keyframes firePop{
+    0%{ transform:translate(-50%,-50%) scale(.4); opacity:0; }
+    28%{ transform:translate(-50%,-50%) scale(1.15); opacity:1; }
+    62%{ transform:translate(-50%,-50%) scale(1); opacity:.95; }
+    100%{ transform:translate(-50%,-56%) scale(1.2); opacity:0; }
+  }
+  /* 通知タップで該当投稿を一瞬ハイライト(teal・控えめ) */
+  .notif-hl{ animation:notifHl 1.6s ease-out; }
+  @keyframes notifHl{ 0%{ box-shadow:0 0 0 0 rgba(20,184,124,0); } 18%{ box-shadow:0 0 0 3px rgba(20,184,124,.45); } 100%{ box-shadow:0 0 0 0 rgba(20,184,124,0); } }
+  @media (prefers-reduced-motion: reduce){ .page{animation:none;} .sheet{transition:none;} .fire-pop{animation:none; opacity:0;} .notif-hl{animation:none;} }

@@ -231,6 +231,58 @@ export async function removeReaction(postId, kind){
   if(error) fail('removeReaction', error);
 }
 
+// コメント(4d)。RLSが「見える投稿(is_connected(owner))のコメントだけ」を担保=1本TLと一致。
+// id はクライアント採番(entries/posts/rules と同方針)。作成時は投稿主へ通知(DBトリガー)。
+export async function loadComments(){
+  const { data, error } = await supabase.from('comments')
+    .select('id, post_id, user_id, body, created_at').order('created_at', { ascending: true });
+  if(error){ console.error('loadComments failed:', error.message || error); return []; }
+  return (data || []).map(c=>({ id:c.id, postId:c.post_id, who:c.user_id, body:c.body, createdAt:c.created_at }));
+}
+export async function addComment(c){
+  const { error } = await supabase.from('comments')
+    .insert({ id:c.id, post_id:c.postId, user_id:_uid, body:c.body });
+  if(error){ fail('addComment', error); return false; }
+  return true;
+}
+export async function removeComment(id){
+  const { error } = await supabase.from('comments').delete().eq('id', id);
+  if(error) fail('removeComment', error);
+}
+
+// コメントへのエール(🔥・comment_reactions)。🔥のみ・1人1コメント1つ(PKで一意)。
+// RLSが「見えるコメント(=見える投稿)の🔥だけ」返す/付け外しは自分の分のみ。
+export async function loadCommentReactions(){
+  const { data, error } = await supabase.from('comment_reactions').select('comment_id, user_id');
+  if(error){ console.error('loadCommentReactions failed:', error.message || error); return []; }
+  return data || [];
+}
+export async function addCommentReaction(commentId){
+  const { error } = await supabase.from('comment_reactions').insert({ comment_id: commentId, user_id: _uid });
+  if(error) fail('addCommentReaction', error);
+}
+export async function removeCommentReaction(commentId){
+  const { error } = await supabase.from('comment_reactions').delete()
+    .eq('comment_id', commentId).eq('user_id', _uid);
+  if(error) fail('removeCommentReaction', error);
+}
+
+// 通知(B-3)。RLS(recipient=本人)で自分宛だけ返る。表示は直近30件・新しい順。
+export async function loadNotifications(){
+  const { data, error } = await supabase.from('notifications')
+    .select('id, actor, type, ref_id, read, created_at')
+    .order('created_at', { ascending: false }).limit(30);
+  if(error){ console.error('loadNotifications failed:', error.message || error); return []; }
+  return data || [];
+}
+// 未読を既読化。列レベルGRANTで read/read_at のみ更新可・RLSで自分宛のみ。失敗は静かに(通知は補助)。
+export async function markNotificationsRead(){
+  const { error } = await supabase.from('notifications')
+    .update({ read: true, read_at: new Date().toISOString() })
+    .eq('recipient', _uid).eq('read', false);
+  if(error) console.error('markNotificationsRead failed:', error.message || error);
+}
+
 // DB (snake_case) → in-memory shapes used across main.js.
 // dur_sec is the source of truth; keep both durSec (persist) and dur (display label).
 function mapEntry(x){

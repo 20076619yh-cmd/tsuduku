@@ -2,7 +2,7 @@
 import './style.css';
 import Chart from 'chart.js/auto';   // auto = same all-controllers registration as the old UMD CDN
 import { supabase } from './supabase.js';
-import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler, markTourDone, loadPublicProfiles, loadPublicRules, createInvite, joinWithCode, loadGroupAdmin, removeGroupMember, leaveGroups, loadConnectedWorkouts, loadReactions, addReaction, removeReaction, saveSettings, loadPosts } from './db.js';
+import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler, markTourDone, loadPublicProfiles, loadPublicRules, createInvite, joinWithCode, loadGroupAdmin, removeGroupMember, leaveGroups, loadConnectedWorkouts, loadReactions, addReaction, removeReaction, saveSettings, loadPosts, loadComments, addComment, removeComment, loadCommentReactions, addCommentReaction, removeCommentReaction, loadNotifications, markNotificationsRead } from './db.js';
 
 /* ---------- members ---------- */
 // Flat initial state: just me. Friends arrive in the backend/sharing phase (I/I2).
@@ -16,6 +16,16 @@ let joinedSpaceIds = [];
 // B-2: つながり相手の今週の運動(仲間の今日の宣言用) / 見えるpost_reactions(post_id,user_id,kind)
 let connectedWork = [];
 let reactionRows = [];
+// コメント(4d)。postId で投稿にぶら下がる(全員に見える=DMにならない構造)。created_at 昇順で保持。
+let comments = [];
+// コメントへの🔥(comment_reactions・🔥のみ)。{comment_id,user_id} の見える分だけRLSが返す。
+let commentReactionRows = [];
+// カード単位の表示状態(再描画で保持): コメント全展開。
+const commentsOpen = new Set();
+// 通知(B-3)。recipient=本人のみRLSで返る。直近30件・新しい順。表示は既知3種のみ(廃止分は出さない)。
+let notifications = [];
+// クロスユーザーの自由テキスト(コメント本文)は必ずエスケープしてから innerHTML に流す(XSS防止)。
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 // ユーザーが「＋その他」で追加したカスタム部位。users.custom_tags に永続化・全ピッカーの選択肢に出す。
 let userParts = [];
 // 部位チップ列(HTML): 部位が空なら既定の「運動」チップを出す(部位なしでも空表示にしない)。
@@ -303,7 +313,7 @@ function renderFeed(){
     const durLine = p.dur ? `<div class="${p.text?'mt-2.5 ':''}flex items-center gap-1.5 text-[12px] font-bold text-sub"><span class="w-1.5 h-1.5 rounded-full bg-accent"></span>実施 ${p.dur}</div>` : '';
     const body = (textLine||durLine) ? `<div class="px-4 pt-3 pb-1">${textLine}${durLine}</div>` : '';
     return `
-    <article class="rounded-2xl bg-card border border-line shadow-card overflow-hidden">
+    <article class="relative rounded-2xl bg-card border border-line shadow-card overflow-hidden" data-postcard="${p.id}">
       <div class="flex items-center gap-3 px-4 pt-3.5">
         ${avatar(m,38,p.who)}
         <div class="flex-1">
@@ -315,12 +325,8 @@ function renderFeed(){
       ${imgBlock}
       ${body}
       ${ruleSection(p)}
-      <div class="flex gap-2 px-4 py-3 border-t border-line">
-        ${reactBtn(p.id,'fire','🔥')}
-        ${reactBtn(p.id,'muscle','💪')}
-        ${reactBtn(p.id,'clap','👏')}
-      </div>
-      <!-- コメント欄(4d)予定地。将来ここに border-t border-line のセクションを追加する -->
+      ${fireRow(p)}
+      ${commentSection(p)}
     </article>`;
   }).join('');
 }
@@ -330,6 +336,127 @@ function reactMine(pid,kind){ return reactionRows.some(r=>r.post_id===pid&&r.kin
 function reactBtn(pid,kind,emo){
   const n=reactCount(pid,kind), mine=reactMine(pid,kind);
   return `<button class="react pop flex items-center gap-1.5 border px-3 py-1.5 rounded-full text-[13px] font-bold ${mine?'border-aline bg-asoft text-accent':'border-line bg-card text-sub'}" data-post="${pid}" data-k="${kind}"><span>${emo}</span><span class="cnt">${n}</span></button>`;
+}
+// リアクションは🔥(エール)のみに統一(💪👏・定型5種は廃止)。ピル=タップでトグル＋カウント表示。
+// 加えてカード本体のダブルタップでも🔥が付く(Instagram式・付ける専用、解除はピル)。post_reactionsの
+// 旧muscle/clapデータは残置(RLS/GRANTそのまま)だが、集計・表示は kind='fire' だけ見る。
+function fireRow(p){
+  return `<div class="flex items-center gap-2 px-4 py-3 border-t border-line">${reactBtn(p.id,'fire','🔥')}</div>`;
+}
+// カード中央に控えめな🔥ポップ(ダブルタップ時)。描画後の要素に後付け→animationendで自ら消える。
+function flyFire(el, size=58){
+  if(!el) return;
+  const s=document.createElement('span');
+  s.className='fire-pop'; s.textContent='🔥'; s.style.fontSize=size+'px';
+  el.appendChild(s);
+  s.addEventListener('animationend', ()=> s.remove());
+}
+// 投稿への🔥はダブルタップで「付ける」専用(既にあれば維持・再ポップのみ)。解除はピルで。
+function addPostFire(pid){
+  const already=reactMine(pid,'fire');
+  if(!already){ reactionRows.push({post_id:pid,user_id:CURRENT_USER,kind:'fire'}); addReaction(pid,'fire'); renderFeed(); }
+  const card=document.querySelector(`[data-postcard="${CSS.escape(pid)}"]`); flyFire(card, 58);
+}
+// コメントへの🔥はダブルタップでトグル(ボタンは置かず=カウントのみ表示)。付与時だけポップ。
+function cFireCount(cid){ return commentReactionRows.filter(r=>r.comment_id===cid).length; }
+function cFireMine(cid){ return commentReactionRows.some(r=>r.comment_id===cid && r.user_id===CURRENT_USER); }
+function toggleCommentFire(cid){
+  const mine=cFireMine(cid);
+  if(mine){ commentReactionRows=commentReactionRows.filter(r=>!(r.comment_id===cid && r.user_id===CURRENT_USER)); removeCommentReaction(cid); }
+  else{ commentReactionRows.push({comment_id:cid,user_id:CURRENT_USER}); addCommentReaction(cid); }
+  renderFeed();
+  if(!mine){ const el=document.querySelector(`[data-commentcard="${CSS.escape(cid)}"]`); flyFire(el, 30); }
+}
+// コメント欄。新しい2件を表示・3件以上は「他N件を見る」で全展開(折りたたみ)。自分のコメントは✕で削除。
+// 本文はクロスユーザーの自由テキストなので esc() 必須。入力は投稿カードから直接(画面遷移なし=3〜4分ルール)。
+function commentSection(p){
+  const cs=comments.filter(c=>c.postId===p.id);   // created_at 昇順
+  const open=commentsOpen.has(p.id);
+  const shown=open?cs:cs.slice(-2);                // 折りたたみ時=最新2件(末尾2)
+  const hiddenN=cs.length-shown.length;
+  const moreBtn=(!open&&hiddenN>0)
+    ? `<button class="comments-expand pop text-[11px] font-bold text-sub mb-2" data-post="${p.id}">他${hiddenN}件のコメントを見る</button>` : '';
+  const rows=shown.map(c=>{
+    const m=members[c.who]||{name:'メンバー',ini:'?',c:'#9AA09A',photo:null};
+    const del=c.who===CURRENT_USER
+      ? `<button class="comment-del pop text-faint text-[12px] ml-1 shrink-0 leading-none" data-id="${c.id}" aria-label="削除">✕</button>` : '';
+    // 🔥はダブルタップで付く(ボタンは置かない)。カウントのみ表示・自分が付けていれば teal。
+    const fc=cFireCount(c.id), fireTag=fc>0
+      ? `<span class="text-[11px] font-bold ${cFireMine(c.id)?'text-accent':'text-faint'} ml-1 shrink-0 leading-none self-center">🔥${fc}</span>` : '';
+    return `<div class="relative flex items-start gap-2 mb-2" data-commentcard="${c.id}">
+      ${avatar(m,22,c.who)}
+      <div class="flex-1 min-w-0"><span class="text-[12px] font-extrabold text-ink">${esc(m.name)}</span><span class="text-[13px] text-ink ml-1.5 break-words">${esc(c.body)}</span></div>
+      ${fireTag}${del}</div>`;
+  }).join('');
+  const composer=`<div class="flex items-center gap-2 ${cs.length?'mt-1':''}">
+    <input class="comment-input flex-1 bg-bg border border-line rounded-full px-3.5 py-2 text-[13px] text-ink placeholder:text-faint outline-none focus:border-aline" data-post="${p.id}" placeholder="コメントを書く…" maxlength="300">
+    <button class="comment-send pop text-[13px] font-extrabold text-accent shrink-0" data-post="${p.id}">送信</button>
+  </div>`;
+  return `<div class="px-4 py-3 border-t border-line">${moreBtn}${rows}${composer}</div>`;
+}
+// コメント送信=楽観更新(即描画)→裏で永続化。送信後は全展開して自分のコメントが隠れないように。
+function sendComment(pid){
+  const inp=document.querySelector(`.comment-input[data-post="${CSS.escape(pid)}"]`);
+  if(!inp) return;
+  const body=inp.value.trim(); if(!body) return;
+  const c={ id:crypto.randomUUID(), postId:pid, who:CURRENT_USER, body, createdAt:new Date().toISOString() };
+  comments.push(c); commentsOpen.add(pid);
+  renderFeed();
+  addComment(c);
+  const ni=document.querySelector(`.comment-input[data-post="${CSS.escape(pid)}"]`); if(ni) ni.focus();
+}
+function delComment(id){ comments=comments.filter(c=>c.id!==id); renderFeed(); removeComment(id); }
+
+/* ---------- 通知(B-3): 「共有と誘い」のトーンのみ。催促・脅迫の文言は憲法で禁止=絶対に出さない ---------- */
+// type→文言。正確な文字列に依存しないよう部分一致で堅牢化。既知3種以外(廃止のトレ開始等)は null=非表示。
+function notifText(n){
+  const name=(members[n.actor] && members[n.actor].name) || 'メンバー';
+  const t=(n.type||'').toLowerCase();
+  if(t.includes('comment')) return `${name}さんがコメントしました`;
+  if(t.includes('react')||t.includes('fire')||t.includes('like')||t.includes('heart')) return `${name}さんが🔥を送りました`;
+  if(t.includes('post')||t.includes('workout')||t.includes('train')||t.includes('entry')) return `${name}さんが運動しました`;
+  return null;   // 既知3種以外は表示しない
+}
+// 表示対象(既知3種のみ)。バッジ・一覧の両方でこの絞り込みを使う。
+function visibleNotifs(){ return notifications.filter(n=>notifText(n)!==null); }
+// 未読バッジ(赤ドットのみ・件数は出さない=催促トーンを避ける)。
+function renderBell(){
+  const dot=document.getElementById('bellDot'); if(!dot) return;
+  const unread=visibleNotifs().some(n=>!n.read);
+  dot.classList.toggle('hidden', !unread);
+}
+function renderNotifyList(){
+  const el=document.getElementById('notifyList'); if(!el) return;
+  const list=visibleNotifs();
+  if(!list.length){
+    el.innerHTML=`<div class="text-center py-10 rounded-2xl bg-bg border border-dashed border-line">
+      <p class="text-[26px]">🌱</p>
+      <p class="text-[13px] text-faint font-bold mt-2">お知らせはまだありません</p>
+    </div>`;
+    return;
+  }
+  el.innerHTML=list.map(n=>{
+    const m=members[n.actor]||{name:'メンバー',ini:'?',c:'#9AA09A',photo:null};
+    const nav=n.ref_id?` data-notif-post="${n.ref_id}"`:'';
+    return `<button class="notif-row pop w-full flex items-center gap-3 rounded-2xl px-3 py-2.5 text-left ${n.read?'':'bg-asoft'}"${nav}>
+      ${avatar(m,34,n.actor)}
+      <span class="flex-1 min-w-0 text-[13px] text-ink leading-snug">${esc(notifText(n))}</span>
+      <span class="text-[11px] text-faint shrink-0">${relTime(n.created_at)}</span>
+    </button>`;
+  }).join('');
+}
+// 通知タップ→該当投稿へ。フィードに切替→描画後に data-postcard へスクロール＋一瞬ハイライト。
+// 読めない/消えた投稿は何もしない(エラーにしない)。
+function gotoNotifPost(postId){
+  closeNotify();
+  showPage('feed');
+  setTimeout(()=>{
+    const card=document.querySelector(`[data-postcard="${CSS.escape(postId)}"]`);
+    if(!card) return;
+    card.scrollIntoView({ behavior:'smooth', block:'center' });
+    card.classList.add('notif-hl');
+    setTimeout(()=>card.classList.remove('notif-hl'), 1600);
+  }, 120);
 }
 // 投稿カード下部に「投稿時点の公開ルール」を最大3つ併記。焼き込み済みスナップショットのルール名のみを描画。
 // 🔥日数は出さない(焼き込み値=投稿時点で、プロフィールのライブ値と食い違い混乱の元。現在の連続は
@@ -1177,7 +1304,16 @@ async function confirmMemberAct(){
   else showToast('操作に失敗しました。通信を確認してください');
 }
 /* ---------- 通知パネル / 設定 / オンボーディングツアー(器) ---------- */
-function openNotify(){ closeAllSheets('notifySheet'); document.getElementById('notifyScrim').classList.remove('hidden'); document.getElementById('notifySheet').classList.add('open'); }
+function openNotify(){
+  closeAllSheets('notifySheet');
+  renderNotifyList();
+  document.getElementById('notifyScrim').classList.remove('hidden'); document.getElementById('notifySheet').classList.add('open');
+  // 開いた瞬間に既読化(楽観: ローカルを既読→ドット消し→裏でDB更新)。憲法トーン=静かに消えるだけ。
+  if(visibleNotifs().some(n=>!n.read)){
+    notifications.forEach(n=>{ n.read=true; }); renderBell();
+    markNotificationsRead();
+  }
+}
 function closeNotify(){ document.getElementById('notifySheet').classList.remove('open'); document.getElementById('notifyScrim').classList.add('hidden'); }
 function openSettings(){ closeAllSheets('settingsSheet'); document.getElementById('settingsScrim').classList.remove('hidden'); document.getElementById('settingsSheet').classList.add('open'); }
 function closeSettings(){ document.getElementById('settingsSheet').classList.remove('open'); document.getElementById('settingsScrim').classList.add('hidden'); }
@@ -1310,8 +1446,8 @@ async function refreshConnected(opts={}){
   if(refreshing || CURRENT_USER==='boy') return; refreshing=true; lastRefresh=Date.now();
   try{
     const wk=buildWeek(TODAY);
-    const [cw, rx, ps]=await Promise.all([ loadConnectedWorkouts(wk[0].date, wk[6].date), loadReactions(), loadPosts() ]);
-    connectedWork=cw; reactionRows=rx;
+    const [cw, rx, ps, cm, crx, nt]=await Promise.all([ loadConnectedWorkouts(wk[0].date, wk[6].date), loadReactions(), loadPosts(), loadComments(), loadCommentReactions(), loadNotifications() ]);
+    connectedWork=cw; reactionRows=rx; comments=cm; commentReactionRows=crx; notifications=nt; renderBell();
     const prevIds = posts.map(p=>p.id).join(',');
     if(ps){ posts.length=0; posts.push(...ps); }
     const changed = !!ps && posts.map(p=>p.id).join(',')!==prevIds;
@@ -1320,7 +1456,9 @@ async function refreshConnected(opts={}){
     renderDayList(); renderGroup();
     const main=document.querySelector('main');
     const nearTop = !main || main.scrollTop < 80;
-    if(opts.forceFeed || !feedIsActive() || (changed && nearTop)) renderFeed();   // 見ている最中でも上部なら反映
+    // コメント入力中(フォーカス中)は背面再描画で入力を飛ばさない(明示更新=forceFeedは除く)
+    const typing = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('comment-input');
+    if(opts.forceFeed || (!typing && (!feedIsActive() || (changed && nearTop)))) renderFeed();   // 見ている最中でも上部なら反映
   }catch(err){ console.error('refreshConnected failed:', err.message || err); }
   finally{ refreshing=false; }
 }
@@ -1329,6 +1467,31 @@ async function refreshConnected(opts={}){
 function refreshIfStale(){ if(Date.now()-lastRefresh > 8000) refreshConnected(); }
 function onSyncPage(){ return ['schedule','feed'].some(id=>{ const el=document.getElementById(id); return el && el.classList.contains('active'); }); }
 document.querySelectorAll('.nav-btn').forEach(b=> b.addEventListener('click',()=>showPage(b.dataset.page)));
+// コメント入力で Enter=送信(改行しない・投稿カードから直接送れる)
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter' && e.target.classList && e.target.classList.contains('comment-input')){
+    e.preventDefault(); sendComment(e.target.dataset.post);
+  }
+});
+// ダブルタップ/ダブルクリックで🔥。コメント上ならコメント🔥(トグル)、それ以外は投稿🔥(付ける専用)。
+// 操作系(ボタン/入力/リンク)の上では発火しない=誤操作防止。
+function handleDoubleFire(target){
+  if(!target || (target.closest && target.closest('button, input, textarea, a'))) return;
+  const cc=target.closest && target.closest('[data-commentcard]'); if(cc){ toggleCommentFire(cc.dataset.commentcard); return; }
+  const pc=target.closest && target.closest('[data-postcard]');    if(pc){ addPostFire(pc.dataset.postcard); return; }
+}
+document.addEventListener('dblclick', e=> handleDoubleFire(e.target));
+// モバイル: touchend の300ms二連(近接)で疑似ダブルタップ。consume時は既定操作(ズーム/合成click)を抑止。
+let _lastTapT=0, _lastTapX=0, _lastTapY=0;
+document.addEventListener('touchend', e=>{
+  const t=e.changedTouches && e.changedTouches[0]; if(!t) return;
+  const now=Date.now(), dt=now-_lastTapT;
+  const dx=Math.abs(t.clientX-_lastTapX), dy=Math.abs(t.clientY-_lastTapY);
+  if(dt>0 && dt<300 && dx<24 && dy<24){
+    if(e.target.closest && e.target.closest('[data-postcard]') && !e.target.closest('button, input, textarea, a')){ e.preventDefault(); }
+    handleDoubleFire(e.target); _lastTapT=0;
+  } else { _lastTapT=now; _lastTapX=t.clientX; _lastTapY=t.clientY; }
+}, { passive:false });
 
 document.addEventListener('click',e=>{
   // ツアー表示中は「次へ/スキップ」以外のクリックを全遮断(背面UIの誤操作・シート誤起動を根絶)
@@ -1348,6 +1511,10 @@ document.addEventListener('click',e=>{
     else{ reactionRows.push({post_id:pid,user_id:CURRENT_USER,kind}); addReaction(pid,kind); }
     renderFeed();
   }
+  // コメント全展開 / コメント送信・削除(投稿カードから直接)
+  { const ce=e.target.closest('.comments-expand'); if(ce){ commentsOpen.add(ce.dataset.post); renderFeed(); return; } }
+  { const cs=e.target.closest('.comment-send');    if(cs){ sendComment(cs.dataset.post); return; } }
+  { const cd=e.target.closest('.comment-del');     if(cd){ delComment(cd.dataset.id); return; } }
   const seg=e.target.closest('.seg-btn');
   if(seg){
     document.querySelectorAll('.seg-btn').forEach(s=>{s.classList.remove('active');s.classList.add('text-sub');});
@@ -1427,6 +1594,7 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#bellBtn')) openNotify();
   if(e.target.closest('#notifyClose')||e.target.closest('#notifyScrim')) closeNotify();
   if(e.target.closest('#notifyTour')){ closeNotify(); openTour(); }
+  { const nr=e.target.closest('.notif-row'); if(nr && nr.dataset.notifPost){ gotoNotifPost(nr.dataset.notifPost); return; } }
   if(e.target.closest('#openSettings')) openSettings();
   if(e.target.closest('#settingsClose')||e.target.closest('#settingsScrim')) closeSettings();
   if(e.target.closest('#settingsTour')){ closeSettings(); openTour(); }
@@ -1510,13 +1678,16 @@ async function initApp(session){
     connectedWork = await loadConnectedWorkouts(wk[0].date, wk[6].date);
     connectedWork.forEach(e=>{ if(e.who && !members[e.who]) members[e.who]={ name:'メンバー', ini:'?', c:'#9AA09A', photo:null }; });
     reactionRows = await loadReactions();
+    comments = await loadComments();
+    commentReactionRows = await loadCommentReactions();
+    notifications = await loadNotifications();
   }catch(err){
     console.error('bootstrap/load failed:', err.message || err);
     showToast('読み込みに失敗しました。再読み込みしてください');
   }
   renderFeedAvatars(); renderFeed(); renderWeek(); renderDayList(); renderGroup();
   renderLimits(); renderMonth(); renderMaintCaption(); renderStartBar(); renderStats();
-  renderIdentity();
+  renderIdentity(); renderBell();
   showPage('schedule');   // app opens on 予定 (also reveals the 運動開始 bar)
   // 初回のみ自動表示。既にデータがある既存ユーザーには突然出さない(手動再表示は設定/🔔から)
   const hasData = logEntries.length>0 || posts.length>0 || limits.length>0;
