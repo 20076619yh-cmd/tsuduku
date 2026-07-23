@@ -3,6 +3,7 @@ import './style.css';
 import Chart from 'chart.js/auto';   // auto = same all-controllers registration as the old UMD CDN
 import { supabase } from './supabase.js';
 import { bootstrap, loadAll, profileFromRow, saveProfileRow, upsertEntry, removeEntry, upsertPost, upsertRule, removeRule, setSaveErrorHandler, markTourDone, loadPublicProfiles, loadPublicRules, createInvite, joinWithCode, loadGroupAdmin, removeGroupMember, leaveGroups, loadConnectedWorkouts, loadReactions, addReaction, removeReaction, saveSettings, loadPosts, loadComments, addComment, removeComment, loadCommentReactions, addCommentReaction, removeCommentReaction, loadNotifications, markNotificationsRead } from './db.js';
+import { treeArt } from './tree-art.js';
 
 /* ---------- members ---------- */
 // Flat initial state: just me. Friends arrive in the backend/sharing phase (I/I2).
@@ -1121,10 +1122,13 @@ function treeSpecies(){
   return sp;
 }
 function treeStage(total){ let i=0; TREE_STAGES.forEach((s,k)=>{ if(total>=s.min) i=k; }); return { ...TREE_STAGES[i], idx:i }; }
-function treeEmoji(stage, sp){ return stage.emoji || (stage.label==='開花'?sp.bloom:sp.mature); }
+// 成長段階アップの検知(SVGのgrow-popは段階が上がった時だけ・初回ロードでは出さない)。
+let _prevTreeStage = -1;
 function renderTree(){
   const el=document.getElementById('treeCard'); if(!el) return;
-  const total=burnTotal(), sp=treeSpecies(), stage=treeStage(total), emoji=treeEmoji(stage,sp);
+  const total=burnTotal(), sp=treeSpecies(), stage=treeStage(total);
+  const grow = _prevTreeStage!==-1 && stage.idx>_prevTreeStage; _prevTreeStage=stage.idx;
+  const svg = treeArt(sp.key, stage.idx, { px:64, grow, label:`${sp.name}の木・${stage.label}` });
   const nextMin = stage.idx+1<TREE_STAGES.length ? TREE_STAGES[stage.idx+1].min : null;
   const foot = !hasAnyWeight()
     ? `<p class="text-[11px] text-accent font-bold mt-2">🚿 体重を入れると水やりできる（消費カロリーが計算されます）</p>`
@@ -1133,7 +1137,7 @@ function renderTree(){
         : `<p class="text-[10px] text-accent font-bold mt-2">🌟 最後まで育ちました</p>`);
   el.innerHTML=`
     <div class="flex items-center gap-4">
-      <div class="text-[52px] leading-none select-none">${emoji}</div>
+      <div class="shrink-0 select-none">${svg}</div>
       <div class="flex-1 min-w-0">
         <p class="text-[13px] font-extrabold text-ink">${sp.name}の木・${stage.label}</p>
         <p class="text-[11px] text-faint font-bold mt-0.5">累計消費 <span class="text-accent font-extrabold text-[13px]">${total.toLocaleString()}</span> kcal</p>
@@ -1202,13 +1206,14 @@ function pcRuleRow(l){
 // マイページのサマリー(自分のカードのみ): 木・連続記録・つながり人数・参加グループ数。
 // 数字は本人だけが見る=通帳(消費kcalは出さない・木の姿と回数系のみ)。◯代目(世代)はPhase 2で。
 function mySummaryHtml(){
-  const sp=treeSpecies(), stage=treeStage(burnTotal()), emoji=treeEmoji(stage,sp);
+  const sp=treeSpecies(), stage=treeStage(burnTotal());
+  const svg=treeArt(sp.key, stage.idx, { px:44, label:`${sp.name}の木・${stage.label}` });
   const conns=Object.keys(members).filter(id=>id!==CURRENT_USER).length;
   const groups=1 + (Array.isArray(joinedSpaceIds)?joinedSpaceIds.length:0);   // 自分のグループ＋参加中
   const cell=(v,label)=>`<div class="text-center px-1"><p class="text-[17px] font-extrabold text-ink leading-none">${v}</p><p class="text-[10px] text-faint font-bold mt-1">${label}</p></div>`;
   return `
     <div class="rounded-2xl bg-asoft border border-aline px-4 py-3 flex items-center gap-3 mb-3">
-      <div class="text-[34px] leading-none select-none">${emoji}</div>
+      <div class="shrink-0 select-none">${svg}</div>
       <div class="min-w-0"><p class="text-[12px] font-extrabold text-ink truncate">${sp.name}の木・${stage.label}</p>
         <p class="text-[10px] text-faint font-bold mt-0.5">運動を続けて育てよう</p></div>
     </div>

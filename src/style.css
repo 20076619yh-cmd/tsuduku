@@ -29,7 +29,13 @@
     62%{ transform:translate(-50%,-50%) scale(1); opacity:.95; }
     100%{ transform:translate(-50%,-56%) scale(1.2); opacity:0; }
   }
+  /* fit tree SVG: 葉のゆっくりした揺れ(sway)＋成長段階アップ時の一度きりポップ(grow) */
+  .tree-svg{ display:block; overflow:visible; }
+  .tree-svg .tree-sway{ transform-origin:50px 108px; animation:treeSway 5s ease-in-out infinite; }
+  @keyframes treeSway{ 0%,100%{transform:rotate(-1.1deg)} 50%{transform:rotate(1.1deg)} }
+  .tree-svg.tree-grow{ transform-box:fill-box; transform-origin:50% 92%; animation:treeGrow .55s ease-out; }
+  @keyframes treeGrow{ 0%{transform:scale(.82); opacity:.55} 60%{transform:scale(1.04)} 100%{transform:scale(1); opacity:1} }
   /* 通知タップで該当投稿を一瞬ハイライト(teal・控えめ) */
   .notif-hl{ animation:notifHl 1.6s ease-out; }
   @keyframes notifHl{ 0%{ box-shadow:0 0 0 0 rgba(20,184,124,0); } 18%{ box-shadow:0 0 0 3px rgba(20,184,124,.45); } 100%{ box-shadow:0 0 0 0 rgba(20,184,124,0); } }
-  @media (prefers-reduced-motion: reduce){ .page{animation:none;} .sheet{transition:none;} .fire-pop{animation:none; opacity:0;} .notif-hl{animation:none;} }
+  @media (prefers-reduced-motion: reduce){ .page{animation:none;} .sheet{transition:none;} .fire-pop{animation:none; opacity:0;} .notif-hl{animation:none;} .tree-svg .tree-sway,.tree-svg.tree-grow{animation:none;} }
