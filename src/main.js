@@ -1044,7 +1044,9 @@ function renderProgressHero(){
   set('heroStreak', curStreak());
   // 予定達成率リング(%)は廃止=プレッシャーになるため(ノーシェイム)
   const weights=logEntries.filter(e=>e.type==='weight'&&e.who===CURRENT_USER).slice().sort((a,b)=> a.date<b.date?-1:1);
-  set('heroWeight', weights.length?weights[weights.length-1].kg:'—');
+  const wv = weights.length ? weights[weights.length-1].kg : null;
+  const hw = document.getElementById('heroWeight');
+  if(hw) hw.innerHTML = wv!=null ? `${wv}<span class="text-[12px] text-faint font-bold ml-0.5">kg</span>` : '—';
   const del=document.getElementById('heroWeightDelta');
   if(del){ const d=weightDelta(cutoff); del.textContent=d; del.classList.toggle('text-accent', d.startsWith('▼')); del.classList.toggle('text-faint', !d.startsWith('▼')); }
   const ht=document.getElementById('heroTime'); if(ht) ht.innerHTML=fmtMinHtml(doneWk.reduce((s,e)=>s+durToMin(e.dur),0));
